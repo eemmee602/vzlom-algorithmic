@@ -2,20 +2,18 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="{StaticResource BgDarkBrush}">
-    <Grid Margin="8">
+    <Grid Margin="10">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Top bar : status + controls -->
+        <!-- Status bar -->
         <Border Grid.Row="0" Background="{StaticResource BgMediumBrush}" 
-                CornerRadius="4" Padding="8,4" Margin="0,0,0,6">
+                CornerRadius="8" Padding="10,6" Margin="0,0,0,8">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
@@ -25,21 +23,23 @@
                 </Grid.ColumnDefinitions>
 
                 <TextBlock x:Name="StatusIcon" Text="●" 
-                           Foreground="{StaticResource AccentGreenBrush}" FontSize="10"/>
+                           Foreground="{StaticResource AccentGreenBrush}" FontSize="10"
+                           VerticalAlignment="Center"/>
                 <TextBlock x:Name="StatusLabel" Grid.Column="1" Text="Prêt" 
                            Foreground="{StaticResource TextSecondaryBrush}" 
                            FontSize="11" Margin="6,0,8,0" VerticalAlignment="Center"/>
 
-                <TextBlock x:Name="SshIndicator" Grid.Column="3" Text="" 
+                <TextBlock x:Name="SshIndicator" Grid.Column="2" Text="" 
                            FontSize="11" VerticalAlignment="Center" Margin="0,0,4,0"/>
-                <Button x:Name="BtnSsh" Grid.Column="4" Content="🔌 SSH" 
-                        Click="OnToggleSsh" FontSize="10" Height="20" Padding="6,0" Margin="0,0,4,0"/>
-                <Button x:Name="BtnBypass" Grid.Column="5" Content="⚡ BYPASS" 
-                        Click="OnToggleBypass" FontSize="10" Height="20" Padding="6,0" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnMemory" Grid.Column="6" Content="🧠" 
-                        Click="OnMemory" FontSize="12" Height="20" Width="24" Padding="0" Margin="0,0,4,0"/>
-                    <Button x:Name="BtnSettings" Grid.Column="7" Content="⚙" 
-                        Click="OnSettings" FontSize="14" Height="20" Width="24" Padding="0"/>
+                <Button x:Name="BtnMemory" Grid.Column="3" Content="🧠" 
+                        Click="OnMemory" FontSize="13" Height="24" Width="28" Padding="0" 
+                        Margin="0,0,4,0" Style="{StaticResource IconButtonStyle}"/>
+                <Button x:Name="BtnBypass" Grid.Column="4" Content="⚡" 
+                        Click="OnToggleBypass" FontSize="13" Height="24" Width="28" Padding="0" 
+                        Margin="0,0,4,0" Style="{StaticResource IconButtonStyle}"/>
+                <Button x:Name="BtnSettings" Grid.Column="5" Content="⚙" 
+                        Click="OnSettings" FontSize="14" Height="24" Width="28" Padding="0" 
+                        Style="{StaticResource IconButtonStyle}"/>
             </Grid>
         </Border>
 
@@ -47,52 +47,34 @@
         <ScrollViewer Grid.Row="1" x:Name="ChatScroll" 
                       VerticalScrollBarVisibility="Auto"
                       Background="Transparent">
-            <StackPanel x:Name="ChatPanel" Margin="0,0,4,0"/>
+            <StackPanel x:Name="ChatPanel" Margin="0,0,6,0"/>
         </ScrollViewer>
 
-        <!-- Image preview -->
-        <Border Grid.Row="2" x:Name="ImagePreviewPanel" 
-                Visibility="Collapsed" Margin="0,6" 
-                Background="{StaticResource BgMediumBrush}" 
-                CornerRadius="4" Padding="8">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
-                <TextBlock Text="🖼" FontSize="20" VerticalAlignment="Center"/>
-                <TextBlock x:Name="ImageName" Grid.Column="1" 
-                           Margin="8,0" VerticalAlignment="Center"
-                           Foreground="{StaticResource TextSecondaryBrush}"/>
-                <Button Grid.Column="2" Content="✕" Click="OnRemoveImage" 
-                        Width="24" Height="24" Padding="0"
-                        Background="{StaticResource AccentRedBrush}"/>
-            </Grid>
-        </Border>
-
         <!-- Input area -->
-        <Border Grid.Row="3" Background="{StaticResource BgMediumBrush}" 
-                CornerRadius="4" Padding="8" Margin="0,6,0,0">
+        <Border Grid.Row="2" Background="{StaticResource BgMediumBrush}" 
+                CornerRadius="8" Padding="10" Margin="0,8,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <TextBox x:Name="InputBox" Grid.Column="0" 
+                <Button x:Name="BtnImage" Grid.Column="0" Content="🖼" 
+                        Click="OnPasteImage" Width="36" Height="36" Margin="0,0,6,0" 
+                        FontSize="16" Style="{StaticResource IconButtonStyle}"/>
+
+                <TextBox x:Name="InputBox" Grid.Column="1" 
                          TextWrapping="Wrap" AcceptsReturn="True"
-                         MinHeight="40" MaxHeight="120"
+                         MinHeight="38" MaxHeight="100"
                          VerticalScrollBarVisibility="Auto"
                          FontSize="13"
                          KeyDown="OnInputKeyDown"/>
 
-                <Button x:Name="BtnImage" Grid.Column="1" Content="🖼" 
-                        Click="OnPasteImage" Width="36" Height="36" Margin="4,0" FontSize="16"/>
                 <Button x:Name="BtnSend" Grid.Column="2" Content="⏎" 
-                        Click="OnSend" Width="36" Height="36" FontSize="18"
-                        Background="{StaticResource AccentGreenBrush}" Foreground="#000"/>
+                        Click="OnSend" Width="36" Height="36" Margin="6,0,0,0" 
+                        FontSize="18" Background="{StaticResource AccentGreenBrush}" 
+                        Foreground="#000" Style="{StaticResource SendButtonStyle}"/>
             </Grid>
         </Border>
     </Grid>
