@@ -290,6 +290,11 @@ function appendToAssistant(text) {
   document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
 }
 
+function showThinking(msg) {
+  // Pas de carte dans le chat — status bar seulement
+  setStatus('🤔 ' + (msg || 'Réflexion...').substring(0, 25));
+}
+
 function showStatusCard(msg) {
   setStatus(msg);
   addMsg(`⚡ ${msg}`, 'status');
@@ -369,9 +374,7 @@ async function send() {
   doneShown = false;
   thinkingTime = Date.now();
 
-  setStatus('🤔 Réflexion...');
-  // Show thinking card
-  showThinking('Analyse de la demande...');
+  setStatus('🤔 Analyse...');
 
   let attempts = 0;
   let maxAttempts = keys.length + fallbacks.length;
@@ -382,13 +385,12 @@ async function send() {
     const model = attempts < 1 ? currentModel : fallbacks[attempts - 1] || currentModel;
 
     try {
-      if (attempts > 0) setStatus(`🔄 Bascule → ${model}`);
-      else setStatus(`🤖 ${model}`);
+      if (attempts > 0) setStatus(`🔄 ${model.split('/').pop().substring(0, 15)}`);
+      else setStatus(`🤖 ${model.split('/').pop().substring(0, 18)}`);
 
       removeTyping();
-      // Remove thinking card when streaming starts
-      const tc = document.getElementById('thinkingCard');
-      if (tc) { tc.style.opacity = '0.3'; tc.style.fontSize = '10px'; tc.innerHTML = '✔ ' + (tc.textContent || ''); }
+      // Streaming démarre
+      setStatus('🤖 ' + model.split('/').pop().substring(0, 20));
       currentDiv = addMsg('', 'assistant');
       let full = '';
 
