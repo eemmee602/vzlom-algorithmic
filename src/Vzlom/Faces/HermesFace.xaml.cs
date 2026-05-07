@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.IO;
 using Vzlom.Core;
 using System.IO;
+using System.Linq;
 using Vzlom.Models;
 
 namespace Vzlom.Faces;
@@ -44,6 +45,45 @@ public partial class HermesFace : UserControl
         AddSystemMessage("🤖 Hermès prêt. Mémoire partagée automatique activée.");
         AddSystemMessage($"🧠 Fichier mémoire: {Path.GetFileName(_memory.GetFilePath())} ({_memory.FileSize} bytes)");
         LoadSavedKeys();
+        LoadDefaults();
+    }
+
+    private void LoadDefaults()
+    {
+        try
+        {
+            // Charger clés API par défaut depuis api_defaults.json
+            var defaultsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "api_defaults.json");
+            if (File.Exists(defaultsPath))
+            {
+                var json = File.ReadAllText(defaultsPath);
+                var config = Newtonsoft.Json.JsonConvert.DeserializeObject<Dictionary<string, object>>(json);
+                if (config == null) return;
+
+                // Clés API
+                if (config.TryGetValue("api_keys", out var keysObj) && keysObj is Newtonsoft.Json.Linq.JArray keysArr)
+                {
+                    var keys = keysArr.Select(k => k.ToString()).ToArray();
+                    foreach (var k in keys)
+                    {
+                        if (!string.IsNullOrEmpty(k))
+                            _api.AddApiKey(k);
+                    }
+                }
+
+                // Modèle par défaut
+                if (config.TryGetValue("default_model", out var modelObj))
+                    _api.SetModel(modelObj.ToString());
+
+                // Fallbacks
+                if (config.TryGetValue("fallback_models", out var fallsObj) && fallsObj is Newtonsoft.Json.Linq.JArray fallsArr)
+                {
+                    foreach (var f in fallsArr)
+                        _api.AddFallbackModel(f.ToString());
+                }
+            }
+        }
+        catch { }
     }
 
     // ─── Messages ───
