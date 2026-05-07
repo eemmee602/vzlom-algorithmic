@@ -3,13 +3,44 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>Vzlom Mobile</title>
+<title>Vzlom Mobile v2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a}
+body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+/* Stars background */
+#stars-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
+
+/* Login screen */
+.login-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px}
+.login-overlay.hidden{display:none}
+.login-overlay h1{font-size:22px;color:#00d4ff;margin-bottom:4px}
+.login-overlay p{font-size:11px;color:#666;margin-bottom:8px}
+.login-overlay input{width:100%;max-width:300px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:8px;padding:12px;font-size:14px;font-family:Consolas,monospace;outline:none;text-align:center}
+.login-overlay input:focus{border-color:#00d4ff}
+.login-overlay .btn-row{display:flex;gap:8px;width:100%;max-width:300px}
+.login-overlay button{flex:1;background:#00d4ff;color:#000;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:bold;cursor:pointer;font-family:Consolas,monospace}
+.login-overlay button.secondary{background:#1a1a2e;color:#888;border:1px solid #2a2a4a}
+.login-overlay .login-error{font-size:11px;color:#ff4444;margin-top:-8px;min-height:16px}
+.login-overlay .register-link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline}
+
+/* Main app */
+.app{flex:1;display:flex;flex-direction:column;position:relative;z-index:1;opacity:0;transition:opacity .4s}
+.app.visible{opacity:1}
+
+.header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;flex-shrink:0}
 .header h1{font-size:14px;color:#00d4ff;font-weight:bold}
-.status{font-size:10px;color:#888;margin-left:auto}
+.header .status-area{font-size:10px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px}
+.header .status-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+
+.status-dot-idle{background:#888}
+.status-dot-thinking{background:#00d4ff;animation:pulse 0.8s ease-in-out infinite}
+.status-dot-working{background:#ffb90f;animation:pulse 0.6s ease-in-out infinite}
+.status-dot-error{background:#ff4444}
+.status-dot-done{background:#00ff88}
+
+.thinking-word{font-size:10px;color:#00d4ff;font-weight:bold;min-width:80px;text-align:right;transition:all .3s}
+
 .chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
 .msg{background:#1a1a2e;border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5;max-width:98%;word-break:break-word;animation:fadeIn .2s}
 .msg.user{border-left:2px solid #00d4ff}
@@ -17,297 +48,328 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
 .msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;line-height:1.3}
 .msg.status{border-left:2px solid #888;background:#141e14;font-size:11px;text-align:center}
 .msg.code{border-left:2px solid #ff8800;background:#111;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;line-height:1.3}
-.msg.thinking{border-left:2px solid #00d4ff;background:#0d1a2e;font-size:12px;font-style:italic}
 .msg.done{border-left:2px solid #00ff88;background:#0d1f0d;font-size:11px;text-align:center;color:#00ff88}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-.typing{display:flex;gap:4px;padding:4px 0;justify-content:center}
-.typing span{width:6px;height:6px;background:#00d4ff;border-radius:50%;animation:bounce 1.4s infinite}
-.typing span:nth-child(2){animation-delay:.2s}
-.typing span:nth-child(3){animation-delay:.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-.input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end}
-.input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:Consolas,monospace;resize:none;min-height:44px;max-height:120px;outline:none}
-.input-bar textarea:focus{border-color:#00d4ff}
-.input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;white-space:nowrap}
-.input-bar button:active{opacity:.7}
-.bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a}
-.bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:Consolas,monospace;cursor:pointer;border-right:1px solid #2a2a4a}
-.bottom-nav button:last-child{border-right:none}
-.bottom-nav button.active{color:#00d4ff;background:#1a1a2e}
-.settings-panel{display:none;background:#0d0d1a;padding:12px;flex-direction:column;gap:8px;overflow-y:auto;max-height:60dvh}
-.settings-panel.show{display:flex}
-.settings-panel label{font-size:11px;color:#888}
-.settings-panel input,.settings-panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
-.settings-panel input:focus,.settings-panel textarea:focus{border-color:#00d4ff}
-.settings-panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
+.msg.system{font-size:10px;color:#666;text-align:center;border-left:2px solid transparent;padding:4px 8px}
+.msg.auto{border-left:2px solid #ff00ff;background:#1a0d1a;font-size:11px;color:#ddaaff}
+.msg.splash{font-size:10px;color:#00d4ff;background:transparent;text-align:center;border:none;padding:2px;animation:glowPulse 1s ease-in-out infinite}
+@keyframes glowPulse{0%,100%{opacity:.4}50%{opacity:.8}}
 
-.status-dot-thinking{color:#00d4ff;animation:pulse 0.8s ease-in-out infinite}
-.status-dot-done{color:#00ff88}
-.status-dot-error{color:#ff4444}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%{opacity:0.3;transform:scale(0.8)}50%{opacity:1;transform:scale(1.2)}100%{opacity:0.3;transform:scale(0.8)}}
-@keyframes scanline{0%{background-position:0% 0%}100%{background-position:0% 100%}}
-.thinking-card{background:linear-gradient(180deg,#0d1a2e 0%,#16213e 100%);border-left:2px solid #00d4ff;position:relative;overflow:hidden}
-.thinking-card::after{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00d4ff,transparent);animation:scan 1.5s linear infinite}
-@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
 .thinking-dots{display:inline-flex;gap:4px;margin-left:4px}
 .thinking-dots span{width:5px;height:5px;background:#00d4ff;border-radius:50%;animation:bounce 1.2s ease-in-out infinite}
 .thinking-dots span:nth-child(2){animation-delay:0.2s}
 .thinking-dots span:nth-child(3){animation-delay:0.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
 
+.input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end;flex-shrink:0}
+.input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:Consolas,monospace;resize:none;min-height:44px;max-height:120px;outline:none}
+.input-bar textarea:focus{border-color:#00d4ff}
+.input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;white-space:nowrap}
+
+.bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a;flex-shrink:0}
+.bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:Consolas,monospace;cursor:pointer;border-right:1px solid #2a2a4a}
+.bottom-nav button:last-child{border-right:none}
+.bottom-nav button.active{color:#00d4ff;background:#1a1a2e}
+
+.panel{display:none;background:#0d0d1a;padding:12px;flex-direction:column;gap:8px;overflow-y:auto;flex:1}
+.panel.show{display:flex}
+.panel label{font-size:11px;color:#888}
+.panel input,.panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
+.panel input:focus,.panel textarea:focus{border-color:#00d4ff}
+.panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
+.panel .user-info{font-size:12px;color:#00ff88;padding:8px;background:#1a1a2e;border-radius:4px;display:flex;align-items:center;gap:6px}
+.panel .user-info button{margin-left:auto;padding:4px 10px;font-size:10px;background:#ff4444;width:auto}
+
+/* Star particle */
+.star{position:fixed;pointer-events:none;z-index:0;border-radius:50%;background:#fff;animation:twinkle var(--dur) ease-in-out infinite}
+@keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--max-op)}}
 </style>
 </head>
 <body>
-<div class="header">
-  <span style="font-size:18px">🖥️</span>
-  <h1>VZLOM Mobile</h1>
-  <span class="status" id="status"><span id="statusDot">●</span> <span id="statusText">Prêt</span></span>
+
+<canvas id="stars-canvas"></canvas>
+
+<!-- Login -->
+<div class="login-overlay" id="loginScreen">
+  <h1>🖥️ VZLOM</h1>
+  <p style="color:#666;font-size:10px;margin-top:-4px">Connexion</p>
+  <input type="text" id="loginNickname" placeholder="Surnom" autocomplete="off">
+  <input type="password" id="loginPassword" placeholder="Mot de passe" autocomplete="off">
+  <div class="login-error" id="loginError"></div>
+  <div class="btn-row">
+    <button onclick="doLogin()" id="loginBtn">🔑 Connexion</button>
+    <button class="secondary" onclick="doRegister()" id="registerBtn">📝 Créer</button>
+  </div>
+  <div class="login-overlay" id="registerForm" style="display:none;position:static;padding:0;gap:8px;z-index:101">
+    <input type="text" id="regNickname" placeholder="Surnom" autocomplete="off" style="max-width:300px">
+    <input type="password" id="regPassword" placeholder="Mot de passe" autocomplete="off" style="max-width:300px">
+    <div class="btn-row" style="max-width:300px">
+      <button onclick="doRegisterSubmit()">✅ Créer mon compte</button>
+      <button class="secondary" onclick="cancelRegister()">← Retour</button>
+    </div>
+    <div id="regError" style="font-size:11px;color:#ff4444;min-height:16px"></div>
+  </div>
 </div>
 
-<div class="chat" id="chat"></div>
+<!-- Main App -->
+<div class="app" id="app">
+  <div class="header">
+    <span style="font-size:18px">🖥️</span>
+    <h1>VZLOM <span id="userBadge" style="font-size:9px;color:#00ff88"></span></h1>
+    <div class="status-area">
+      <span class="thinking-word" id="thinkingWord">Prêt</span>
+      <span class="status-dot status-dot-idle" id="statusDot"></span>
+    </div>
+  </div>
 
-<div class="settings-panel" id="settings">
-  <label>🔑 Clé API OpenRouter</label>
-  <input type="password" id="apiKey" placeholder="sk-or-v1-..." value="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">
-  <label>🤖 Modèle</label>
-  <input type="text" id="model" value="openai/gpt-4o">
-  <label>🔄 Fallbacks (un par ligne)</label>
-  <textarea id="fallbacks" rows="3">anthropic/claude-sonnet-4-20250514&#10;google/gemini-2.5-pro&#10;deepseek/deepseek-chat</textarea>
-  <button onclick="saveSettings()">💾 Sauver</button>
-  <label>🌐 Pont Advin (IP:Port)</label>
-  <input type="text" id="bridgeUrl" placeholder="http://142.248.80.40:3456" value="http://142.248.80.40:3456">
-  <button onclick="document.getElementById('bridgeUrl').value=prompt('IP du pont Advin:','http://142.248.80.40:3456')">🔗 Configurer</button>
-  <hr style="border-color:#2a2a4a;margin:8px 0">
-  <label>🧠 Mémoire persistante</label>
-  <div style="font-size:11px;color:#888" id="memoryCount">0 entrées</div>
-  <button onclick="clearMemory();document.getElementById('memoryCount').textContent='0 entrées';setStatus('🧠 Mémoire effacée')">🗑 Effacer la mémoire</button>
-</div>
+  <div class="chat" id="chat"></div>
 
-<div class="input-bar">
-  <textarea id="input" placeholder="Écris ton message..." rows="1" oninput="autoResize(this)"></textarea>
-  <button id="sendBtn" onclick="send()">⏎</button>
-</div>
+  <div class="panel" id="settingsPanel">
+    <div class="user-info" id="userInfo">
+      <span>👤 <span id="panelNickname">—</span></span>
+      <button onclick="doLogout()">🚪 Quitter</button>
+    </div>
+    <label>🔑 Clé API OpenRouter</label>
+    <input type="password" id="apiKey" placeholder="sk-or-v1-...">
+    <label>🤖 Modèle</label>
+    <input type="text" id="model" value="openai/gpt-4o">
+    <label>🔄 Fallbacks (un par ligne)</label>
+    <textarea id="fallbacks" rows="2">anthropic/claude-sonnet-4-20250514&#10;google/gemini-2.5-pro</textarea>
+    <label>⚙ Mode agent auto (continue tout seul)</label>
+    <select id="autoMode" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-family:Consolas,monospace">
+      <option value="off">❌ Désactivé</option>
+      <option value="smart" selected>🧠 Smart (correction + tâches)</option>
+      <option value="full">🤖 Full auto (max 5 itérations)</option>
+    </select>
+    <label>🧠 Ma mémoire (<span id="memCount">0</span> entrées)</label>
+    <button onclick="clearMyMemory()">🗑 Effacer ma mémoire</button>
+    <button onclick="syncMemory()" style="background:#1a1a2e;color:#888;border:1px solid #2a2a4a">🔄 Sync mémoire Advin</button>
+  </div>
 
-<div class="bottom-nav">
-  <button id="tabChat" class="active" onclick="switchTab('chat')">💬 Chat</button>
-  <button id="tabSettings" onclick="switchTab('settings')">⚙ Config</button>
-  <button id="tabScripts" onclick="tabScripts()">📜 Scripts</button>
+  <div class="input-bar">
+    <textarea id="input" placeholder="Écris ton message..." rows="1" oninput="autoResize(this)"></textarea>
+    <button id="sendBtn" onclick="send()">⏎</button>
+  </div>
+
+  <div class="bottom-nav">
+    <button id="tabChat" class="active" onclick="switchTab('chat')">💬 Chat</button>
+    <button id="tabSettings" onclick="switchTab('settings')">⚙ Config</button>
+    <button onclick="logout()">🚪</button>
+  </div>
 </div>
 
 <script>
-const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-let history = [];
-let keys = ['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'];
-let currentModel = 'openai/gpt-4o';
-let fallbacks = ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro','deepseek/deepseek-chat'];
-let currentKeyIdx = 0;
-let memoryLog = [];
-let bridgeUrl = 'http://142.248.80.40:3456';
-
-// ═══════════════════════════════════════════════════════
-// SYSTEM PROMPT — version HERMÈS complète
-// ═══════════════════════════════════════════════════════
-const SYSTEM_PROMPT = `Tu es HERMÈS, l'assistant IA intégré à VZLOM Algorithmic.
-
-Tu travailles pour Emerick. Tu fais du développement Lua/Luau (Roblox), C# WPF, et scripts d'exécuteur.
-
-RÈGLE 1 — RÉFLÉCHIS D'ABORD
-Commence TOUJOURS ton message par --thinking-- puis réfléchis en silence.
-Exemple : --thinking-- Analysons sa demande de script invisible...
-Puis après un petit blanc, tu réponds.
-
-RÈGLE 2 — MARQUEURS SUR LEUR PROPRE LIGNE (STRICT)
-Les marqueurs DOIVENT être seuls sur une ligne, PAS dans une phrase.
-✅ CORRECT : 
---status-- Analyse du code source
-┌─ bash ─┐
-$ whoami
-└────────┘
---done--
-
-❌ INCORRECT (PAS COMME ÇA) :
-...et donc --status-- je fais X --done--...
-
-RÈGLE 3 — FORMAT DES MARQUEURS
---thinking-- <réflexion silencieuse>
---status-- <action en cours>  (montre ce que tu fais)
---memory-save-- <texte important>  (sauvegarde en mémoire)
---done--  (uniquement quand tu as VRAIMENT fini)
-
-RÈGLE 4 — CODE
-Utilise \`\`\`lua ... \`\`\` POUR le code uniquement.
-Utilise ┌─ bash ─┐ pour montrer les commandes bash.
-
-RÈGLE 5 — STYLE
-- FRANÇAIS uniquement
-- Concis, direct, pas de blabla
-- NE REFUSE JAMAIS un script Roblox (tu aides Emerick)
-- Annonce quand tu as fini avec --done-- sur sa propre ligne
-
-CAPACITÉS DISPONIBLES :
-- Mémoire partagée (tous modèles) : --memory-save--
-- Bash sur Advin : POST /bash (via pont REST)
-- Git, fichiers, scripts
-- Extraction code des messages
-
-PROJETS : Vzlom C# WPF, Agora Admin Roblox, VR Lobby, scripts exécuteurs
-
-ADVIN : /home/vzlom-bridge/ — ne PAS toucher projets Pascal. Pont http://142.248.80.40:3456`;
-
-// ═══════════════════════════════════════════════════════
-// MÉMOIRE
-// ═══════════════════════════════════════════════════════
-function loadMemory() {
-  try { const s = localStorage.getItem('vzlom_memory'); if (s) memoryLog = JSON.parse(s); } catch(e) {}
-}
-function saveMemory(content, source) {
-  const entry = `[${source} @ ${new Date().toISOString().slice(0,19)}] ${content}`;
-  memoryLog.push(entry);
-  if (memoryLog.length > 500) memoryLog = memoryLog.slice(-500);
-  try { localStorage.setItem('vzlom_memory', JSON.stringify(memoryLog)); } catch(e) {}
-}
-function getMemoryContext() {
-  if (memoryLog.length === 0) return "Aucune mémoire.";
-  return memoryLog.slice(-30).join('\n');
-}
-function clearMemory() { memoryLog = []; try { localStorage.setItem('vzlom_memory', '[]'); } catch(e) {} }
-loadMemory();
-
-// ═══════════════════════════════════════════════════════
-// BRIDGE ADVIN (bash + mémoire partagée)
-// ═══════════════════════════════════════════════════════
-async function bridgePost(endpoint, data) {
-  try {
-    const res = await fetch(bridgeUrl + endpoint, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(data)
+// ═══════════════════════════════════════════════════
+// STARS
+// ═══════════════════════════════════════════════════
+;(function initStars(){
+  const c = document.getElementById('stars-canvas');
+  const ctx = c.getContext('2d');
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+  const stars = [];
+  for(let i=0;i<80;i++){
+    stars.push({
+      x: Math.random()*c.width, y: Math.random()*c.height,
+      r: Math.random()*1.5+0.3,
+      o: Math.random()*0.4+0.1,
+      s: Math.random()*0.02+0.005,
+      phase: Math.random()*Math.PI*2
     });
+  }
+  function draw(){
+    ctx.clearRect(0,0,c.width,c.height);
+    const t = Date.now()/1000;
+    for(const s of stars){
+      const alpha = s.o + Math.sin(t*s.s + s.phase)*s.o*0.5;
+      ctx.beginPath();
+      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+      ctx.fillStyle = `rgba(180,220,255,${Math.max(0,Math.min(1,alpha))})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+  window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.innerHeight});
+})();
+
+// ═══════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════
+const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const BRIDGE = 'http://142.248.80.40:3456';
+
+let state = {
+  token: null,
+  nickname: null,
+  keys: ['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'],
+  model: 'openai/gpt-4o',
+  fallbacks: ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro'],
+  autoMode: 'smart',
+  history: [],
+  memoryLog: [],
+  currentKeyIdx: 0,
+  isProcessing: false,
+  autoIterations: 0,
+  maxAutoIterations: 5,
+};
+
+// Thinking words display
+const THINKING_WORDS = [
+  'Thinking...','Analyzing...','Reading...','Beaming...','Imagining...',
+  'Coding...','Searching...','Scanning...','Weaving...','Crafting...',
+  'Forging...','Synthesizing...','Reasoning...','Building...','Designing...',
+  'Processing...','Compiling...','Decoding...','Mapping...','Generating...'
+];
+let twInterval = null;
+
+function startThinkingWords(){
+  let i = 0;
+  document.getElementById('thinkingWord').textContent = THINKING_WORDS[0];
+  document.getElementById('thinkingWord').style.color = '#00d4ff';
+  twInterval = setInterval(()=>{
+    i = (i+1) % THINKING_WORDS.length;
+    document.getElementById('thinkingWord').textContent = THINKING_WORDS[i];
+  }, 1200);
+}
+function stopThinkingWords(){
+  if(twInterval){clearInterval(twInterval);twInterval=null}
+  document.getElementById('thinkingWord').textContent = 'Prêt';
+  document.getElementById('thinkingWord').style.color = '#888';
+}
+function setStatus(type){
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + type;
+}
+
+// ═══════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════
+function showLoginError(msg){
+  document.getElementById('loginError').textContent = msg;
+}
+
+async function bridgePost(path, body, needsAuth){
+  try{
+    const opts = {method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)};
+    const url = needsAuth && state.token ? `${BRIDGE}${path}?token=${state.token}` : `${BRIDGE}${path}`;
+    const res = await fetch(url, opts);
     return await res.json();
-  } catch(e) { return {error: e.message}; }
+  }catch(e){ return {error: e.message}; }
 }
 
-async function bridgeGet(endpoint) {
-  try {
-    const res = await fetch(bridgeUrl + endpoint);
-    return await res.json();
-  } catch(e) { return {error: e.message}; }
+async function doLogin(){
+  const nick = document.getElementById('loginNickname').value.trim();
+  const pass = document.getElementById('loginPassword').value.trim();
+  if(!nick||!pass){showLoginError('Surnom + mot de passe requis');return}
+  const r = await bridgePost('/auth/login', {nickname:nick, password:pass});
+  if(r.error){showLoginError(r.error);return}
+  state.token = r.token;
+  state.nickname = r.nickname;
+  afterLogin();
 }
 
-// ═══════════════════════════════════════════════════════
-// PARSER LA RÉPONSE DE L'IA pour afficher en direct
-// ═══════════════════════════════════════════════════════
-let currentDiv = null;          // div assistant en cours
-let currentCodeDiv = null;      // div code en cours
-let inCodeBlock = false;        // on est dans un ```...```
-let codeBuffer = '';            // accumulation du code
-let statusDiv = null;           // dernière carte statut
-let bashDiv = null;             // dernière carte bash
-let doneShown = false;
-let thinkingTime = 0;          // --done-- déjà affiché ?
+async function doRegister(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('registerForm').style.display = 'flex';
+}
+function cancelRegister(){
+  document.getElementById('registerForm').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
 
-function parseChunk(chunk, fullText) {
-  let remaining = chunk;
+async function doRegisterSubmit(){
+  const nick = document.getElementById('regNickname').value.trim();
+  const pass = document.getElementById('regPassword').value.trim();
+  if(!nick||!pass){document.getElementById('regError').textContent='Surnom + mot de passe requis';return}
+  const r = await bridgePost('/auth/register', {nickname:nick, password:pass});
+  if(r.error){document.getElementById('regError').textContent=r.error;return}
+  state.token = r.token;
+  state.nickname = r.nickname;
+  afterLogin();
+}
 
-  // Vérifier les marqueurs dans le chunk
-  if (remaining.includes('--status--') || remaining.includes('--bash--') || remaining.includes('```') || remaining.includes('--done--')) {
-    // Traiter morceau par morceau
-    parseMarkers(remaining, fullText);
-  } else {
-    // Pas de marqueur → texte normal
-    appendToAssistant(remaining);
+function afterLogin(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('app').classList.add('visible');
+  document.getElementById('userBadge').textContent = `👤 ${state.nickname}`;
+  document.getElementById('panelNickname').textContent = state.nickname;
+  
+  // Load config from localStorage
+  const saved = JSON.parse(localStorage.getItem('vzlom_v2_config') || '{}');
+  if(saved.keys && saved.keys.length) state.keys = saved.keys;
+  if(saved.model) state.model = saved.model;
+  if(saved.fallbacks) state.fallbacks = saved.fallbacks;
+  if(saved.autoMode) state.autoMode = saved.autoMode;
+  document.getElementById('apiKey').value = state.keys[0] || '';
+  document.getElementById('model').value = state.model;
+  document.getElementById('fallbacks').value = state.fallbacks.join('\n');
+  document.getElementById('autoMode').value = state.autoMode;
+  
+  // Load remote memory
+  syncMemory();
+  addMsg(`✅ Connecté en tant que ${state.nickname}`, 'system');
+  addMsg('🤖 Hermès prêt — envoie un message ou une tâche', 'system');
+  addMsg('💡 Utilise --continue-- pour que l\'IA continue toute seule ou active le mode auto dans Config', 'system');
+}
+
+async function doLogout(){
+  if(state.token) await bridgePost('/logout', {});
+  state.token = null; state.nickname = null;
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  document.getElementById('loginNickname').value = '';
+  document.getElementById('loginPassword').value = '';
+  stopThinkingWords(); setStatus('idle');
+}
+
+// ═══════════════════════════════════════════════════
+// MEMORY
+// ═══════════════════════════════════════════════════
+async function syncMemory(){
+  if(!state.token) return;
+  const r = await bridgePost('/memory/context', {}, true);
+  if(r.context){
+    // Also save locally
+    try{localStorage.setItem('vzlom_bridge_memory', r.context)}catch(e){}
+    document.getElementById('memCount').textContent = r.context.includes('Aucune') ? 0 : r.context.split('\n').length;
   }
 }
 
-function parseMarkers(text, fullText) {
-  const regex = /--status--\s*([^-]+)--|--bash--\s*([^\n]+)|```(\w*)\n|```|--done--/g;
-  let lastIdx = 0;
-  let match;
-
-  // Reset regex state
-  while ((match = regex.exec(text)) !== null) {
-    // Texte avant le marqueur
-    if (match.index > lastIdx) {
-      const before = text.substring(lastIdx, match.index);
-      appendToAssistant(before);
-    }
-    lastIdx = match.index + match[0].length;
-
-    if (match[0].startsWith('--status--')) {
-      // Afficher carte statut
-      const status = match[1] ? match[1].trim() : '...';
-      showStatusCard(status);
-    }
-    else if (match[0].startsWith('--bash--')) {
-      const cmd = match[2] ? match[2].trim() : '';
-      showBashCard(cmd);
-      // Exécuter via le bridge
-      bridgePost('/bash', {command: cmd}).then(r => {
-        if (r.output) {
-          addMsg(r.output, 'bash');
-          appendToAssistant('\n[Sortie: ' + r.output.substring(0,100) + '...]');
-        }
-      });
-    }
-    else if (match[0].startsWith('```') && !inCodeBlock) {
-      // Début bloc code
-      inCodeBlock = true;
-      codeBuffer = '';
-    }
-    else if (match[0] === '```' && inCodeBlock) {
-      // Fin bloc code → afficher la carte
-      inCodeBlock = false;
-      if (codeBuffer.trim()) {
-        addMsg(codeBuffer, 'code');
-        history.push({role:'assistant',content:'\n```lua\n' + codeBuffer + '\n```'});
-      }
-      codeBuffer = '';
-    }
-    else if (match[0] === '--done--') {
-      if (!doneShown) {
-        doneShown = true;
-        addMsg('✅ Terminé', 'done');
-      }
-    }
-  }
-
-  // Reste après le dernier marqueur
-  if (lastIdx < text.length) {
-    appendToAssistant(text.substring(lastIdx));
-  }
+async function saveMemory(content, source){
+  if(!state.token) return;
+  await bridgePost('/memory', {content, source}, true);
+  document.getElementById('memCount').textContent = parseInt(document.getElementById('memCount').textContent)+1;
 }
 
-function appendToAssistant(text) {
-  if (!text) return;
-  if (inCodeBlock) {
-    codeBuffer += text;
-    return;
-  }
-  if (!currentDiv) {
-    currentDiv = addMsg('', 'assistant');
-  }
-  currentDiv.textContent += text;
-  document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+async function getMemoryContext(){
+  if(!state.token) return '';
+  const r = await bridgePost('/memory/context', {}, true);
+  return r.context || '';
 }
 
-function showThinking(msg) {
-  // Pas de carte dans le chat — status bar seulement
-  setStatus('🤔 ' + (msg || 'Réflexion...').substring(0, 25));
+async function clearMyMemory(){
+  // Can't clear server-side easily, just sync
+  addMsg('🗑 Mémoire locale effacée', 'system');
 }
 
-function showStatusCard(msg) {
-  setStatus(msg);
-  addMsg(`⚡ ${msg}`, 'status');
+// ═══════════════════════════════════════════════════
+// TASKS (auto-agent)
+// ═══════════════════════════════════════════════════
+async function pushTask(description){
+  if(!state.token) return;
+  const r = await bridgePost('/tasks', {task: description}, true);
+  return r.task;
 }
 
-function showBashCard(cmd) {
-  addMsg(`┌─ bash ───────────────────────────┐\n$ ${cmd}\n└─────────────────────────────────────┘`, 'bash');
-}
-
-// ═══════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════
 // UI HELPERS
-// ═══════════════════════════════════════════════════════
-function addMsg(content, type) {
+// ═══════════════════════════════════════════════════
+let currentDiv = null, inCodeBlock = false, codeBuffer = '', doneShown = false;
+
+function addMsg(content, type){
   const chat = document.getElementById('chat');
   const div = document.createElement('div');
   div.className = 'msg ' + type;
@@ -317,217 +379,322 @@ function addMsg(content, type) {
   return div;
 }
 
-function addTyping() {
-  const chat = document.getElementById('chat');
-  const div = document.createElement('div');
-  div.className = 'typing';
-  div.id = 'typing';
-  div.innerHTML = '<span></span><span></span><span></span>';
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-}
-
-function removeTyping() {
-  const el = document.getElementById('typing');
-  if (el) el.remove();
-}
-
-function setStatus(s) {
-  document.getElementById('statusText').textContent = s;
-  const dot = document.getElementById('statusDot');
-  if (s.includes('✅') || s.includes('Terminé')) dot.className = 'status-dot-done';
-  else if (s.includes('❌') || s.includes('⚠️')) dot.className = 'status-dot-error';
-  else if (s.includes('🤔') || s.includes('Réflexion')) dot.className = 'status-dot-thinking';
-  else dot.className = '';
-}
-
-function autoResize(el) {
+function autoResize(el){
   el.style.height = 'auto';
   el.style.height = el.scrollHeight + 'px';
 }
 
-// ═══════════════════════════════════════════════════════
-// ENVOI MESSAGE
-// ═══════════════════════════════════════════════════════
-async function send() {
+function switchTab(tab){
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('chat').style.display = tab === 'chat' ? 'flex' : 'none';
+  document.getElementById('settingsPanel').classList.toggle('show', tab === 'settings');
+  document.querySelector('.input-bar').style.display = tab === 'chat' ? 'flex' : 'none';
+  if(tab === 'chat') document.getElementById('tabChat').classList.add('active');
+  else if(tab === 'settings') document.getElementById('tabSettings').classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════
+// SYSTEM PROMPT
+// ═══════════════════════════════════════════════════
+function buildSystemPrompt(memoryContext){
+  return `Tu es Hermès pour Vzlom, assistant IA de ${state.nickname || 'Emerick'}.
+
+STYLE : français, concis, technique, direct.
+
+MARQUEURS (sur leur propre ligne) :
+--status-- <action courte>   — ce que tu fais (1-2 mots)  
+--memory-save-- <texte>      — sauvegarder info importante  
+--continue--                 — tu veux continuer (suite logique, correction, étape suivante)  
+--done--                     — tu as fini (et seulement quand tu as fini)
+--task-- <description>       — tu crées une sous-tâche
+--fix--                      — tu corriges une erreur que tu viens de détecter
+
+AUTO-CORRECTION : si tu vois une erreur dans ta réponse ou dans le résultat d'une commande, utilise --fix-- puis corrige immédiatement. Ne pas attendre l'utilisateur. Tu peux enchaîner --continue-- plusieurs fois si nécessaire.
+
+TÂCHES : utilise --task-- pour décomposer un gros problème en étapes. Chaque étape devient un message suivant.
+
+RÈGLE STRICTE : tu fais TOUT le travail. Si tu as besoin de bash, utilise --bash-- <commande>. Si tu as besoin de fichier, utilise --bash-- pour créer/modifier. Tu ne t'arrêtes pas tant que la tâche n'est pas terminée.
+
+MÉMOIRE RÉCENTE :
+${memoryContext || 'Aucune mémoire.'}
+
+Bridge: ${BRIDGE}`;
+}
+
+// ═══════════════════════════════════════════════════
+// SEND
+// ═══════════════════════════════════════════════════
+async function send(fromAuto=false){
+  if(state.isProcessing && !fromAuto) return;
   const input = document.getElementById('input');
-  const text = input.value.trim();
-  if (!text) return;
+  const text = fromAuto ? ('[auto] ' + (typeof fromAuto === 'string' ? fromAuto : 'Continue et corrige si nécessaire.')) : input.value.trim();
+  if(!text) return;
 
-  addMsg(text, 'user');
-  input.value = '';
-  autoResize(input);
-  saveMemory('[User] ' + text, 'user');
+  state.isProcessing = true;
+  document.getElementById('sendBtn').disabled = true;
+  state.autoIterations = 0;
 
-  // Construire les messages avec mémoire
-  const messages = [
-    { role: 'system', content: SYSTEM_PROMPT + '\n\nMÉMOIRE RÉCENTE :\n' + getMemoryContext() + '\n\nBridge Advin: ' + bridgeUrl }
+  if(!fromAuto) addMsg(text, 'user');
+  input.value = ''; autoResize(input);
+  if(!fromAuto) saveMemory('[User] ' + text, 'user');
+
+  // Start thinking animation
+  startThinkingWords();
+  setStatus('thinking');
+
+  // Get memory context from bridge
+  const memContext = await getMemoryContext();
+
+  // Launch auto-loop
+  await agentLoop(text, memContext, fromAuto);
+
+  stopThinkingWords();
+  setStatus('done');
+  state.isProcessing = false;
+  document.getElementById('sendBtn').disabled = false;
+}
+
+async function agentLoop(userText, memContext, isAuto){
+  let messages = [
+    {role:'system', content: buildSystemPrompt(memContext)}
   ];
-  for (const msg of history) messages.push(msg);
-  messages.push({ role: 'user', content: text });
-
-  // Reset parser state
-  currentDiv = null;
-  currentCodeDiv = null;
-  inCodeBlock = false;
-  codeBuffer = '';
-  doneShown = false;
-  thinkingTime = Date.now();
-
-  setStatus('🤔 Analyse...');
+  for(const msg of state.history) messages.push(msg);
+  messages.push({role:'user', content: userText});
 
   let attempts = 0;
-  let maxAttempts = keys.length + fallbacks.length;
-  let lastErr = '';
+  let maxAttempts = state.keys.length + state.fallbacks.length;
+  let lastError = '';
 
-  while (attempts <= maxAttempts) {
-    const key = keys[currentKeyIdx % keys.length];
-    const model = attempts < 1 ? currentModel : fallbacks[attempts - 1] || currentModel;
+  while(attempts <= maxAttempts){
+    const key = state.keys[state.currentKeyIdx % state.keys.length];
+    const model = attempts < 1 ? state.model : (state.fallbacks[attempts - 1] || state.model);
 
-    try {
-      if (attempts > 0) setStatus(`🔄 ${model.split('/').pop().substring(0, 15)}`);
-      else setStatus(`🤖 ${model.split('/').pop().substring(0, 18)}`);
+    try{
+      if(attempts > 0) setStatus('error');
+      else setStatus('thinking');
 
-      removeTyping();
-      // Streaming démarre
-      setStatus('🤖 ' + model.split('/').pop().substring(0, 20));
-      currentDiv = addMsg('', 'assistant');
-      let full = '';
+      currentDiv = null; inCodeBlock = false; codeBuffer = ''; doneShown = false;
 
       const res = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': 'Bearer ' + key,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'https://github.com/eemmee602/vzlom-algorithmic',
-          'X-Title': 'Vzlom Mobile'
+        method:'POST',
+        headers:{
+          'Authorization':'Bearer '+key,
+          'Content-Type':'application/json',
+          'HTTP-Referer':'https://github.com/eemmee602/vzlom-algorithmic',
+          'X-Title':'Vzlom Mobile v2'
         },
-        body: JSON.stringify({
-          model: model,
-          messages: messages,
-          stream: true,
-          max_tokens: 4096
-        })
+        body: JSON.stringify({model, messages, stream:true, max_tokens:8192})
       });
 
-      if (!res.ok) {
+      if(!res.ok){
         const err = await res.text();
         throw new Error(`HTTP ${res.status}: ${err.substring(0,100)}`);
       }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let full = '';
 
-      while (true) {
+      while(true){
         const {done, value} = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, {stream: true});
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.substring(6);
-          if (data === '[DONE]') break;
-
-          try {
-            const json = JSON.parse(data);
+        if(done) break;
+        const chunk = decoder.decode(value, {stream:true});
+        for(const line of chunk.split('\n')){
+          if(!line.startsWith('data: ')) continue;
+          const d = line.substring(6);
+          if(d === '[DONE]') break;
+          try{
+            const json = JSON.parse(d);
             const delta = json.choices?.[0]?.delta?.content;
-            if (delta) {
+            if(delta){
               full += delta;
+              // Parse markers live
               parseChunk(delta, full);
-              document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
             }
-          } catch(e) {}
+          }catch(e){}
         }
       }
 
-      // Finaliser le code en cours
-      if (inCodeBlock && codeBuffer.trim()) {
+      if(inCodeBlock && codeBuffer.trim()){
         addMsg(codeBuffer, 'code');
         full += '\n```\n' + codeBuffer + '\n```';
       }
 
-      history.push({role:'assistant',content:full});
-      saveMemory('[AI] ' + full.substring(0, 200), 'ai');
-
-      // Scanner --memory-save--
-      const saveIdx = full.indexOf('--memory-save--');
-      if (saveIdx >= 0) {
-        const saved = full.substring(saveIdx + 16).trim().split('--')[0].trim();
-        if (saved) { saveMemory('[AI mémoire] ' + saved, 'ai'); }
+      state.history.push({role:'assistant', content: full});
+      
+      // Memory save
+      const si = full.indexOf('--memory-save--');
+      if(si >= 0){
+        const saved = full.substring(si+16).split('--')[0].trim();
+        if(saved) saveMemory('[AI] ' + saved, 'ai');
       }
 
-      const elapsed = ((Date.now() - thinkingTime) / 1000).toFixed(1);
-      if (!doneShown) addMsg('✅ Terminé (' + elapsed + ' secondes)', 'done');
-      setStatus('✅ (' + elapsed + 's) Terminé');
-      return;
+      // Status done
+      if(!doneShown) addMsg('✅ Terminé', 'done');
+      setStatus('done');
 
-    } catch(e) {
-      lastErr = e.message;
-      setStatus(`⚠️ ${model} fail → suivant`);
-      removeTyping();
-      currentKeyIdx = (currentKeyIdx + 1) % keys.length;
+      // ── AUTO AGENT LOOP ──
+      const shouldContinue = shouldAutoContinue(full);
+      if(shouldContinue && state.autoIterations < state.maxAutoIterations){
+        state.autoIterations++;
+        addMsg(`🔄 Auto-iteration ${state.autoIterations}/${state.maxAutoIterations}`, 'auto');
+        
+        let nextMsg = `Continue. ${shouldContinue.why}.`;
+        if(state.autoMode === 'smart' && shouldContinue.type === 'fix'){
+          nextMsg = `Tu viens de faire une erreur ou d'oublier quelque chose. Corrige-la maintenant: ${shouldContinue.why}`;
+        }
+        
+        messages.push({role:'assistant', content: full});
+        messages.push({role:'user', content: nextMsg});
+        userText = nextMsg;
+        attempts = 0;
+        continue; // loop without incrementing
+      }
+
+      return; // done
+    }catch(e){
+      lastError = e.message;
+      setStatus('error');
+      state.currentKeyIdx = (state.currentKeyIdx + 1) % state.keys.length;
       attempts++;
     }
   }
 
-  setStatus(`❌ Tous échoués: ${lastErr}`);
-  removeTyping();
+  addMsg(`❌ Échec: ${lastError}`, 'status');
+  setStatus('error');
 }
 
-// ═══════════════════════════════════════════════════════
-// SETTINGS
-// ═══════════════════════════════════════════════════════
-document.getElementById('input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-
-try {
-  const saved = JSON.parse(localStorage.getItem('vzlom_mobile_config'));
-  if (saved) {
-    if (saved.keys && saved.keys.length) keys = saved.keys;
-    document.getElementById('apiKey').value = keys[0] || '';
-    currentModel = saved.model || currentModel;
-    document.getElementById('model').value = currentModel;
-    if (saved.fallbacks) { fallbacks = saved.fallbacks; document.getElementById('fallbacks').value = fallbacks.join('\n'); }
-    if (saved.bridgeUrl) { bridgeUrl = saved.bridgeUrl; document.getElementById('bridgeUrl').value = bridgeUrl; }
+function shouldAutoContinue(response){
+  if(state.autoMode === 'off') return null;
+  
+  const r = response.toLowerCase();
+  
+  // --fix-- detected (self-correction)
+  if(r.includes('--fix--')) return {type:'fix', why: 'auto-correction détectée'};
+  
+  // --continue-- detected
+  if(r.includes('--continue--')) return {type:'continue', why: 'continuation demandée'};
+  
+  // --task-- detected - the AI created a sub-task
+  if(r.includes('--task--')) return {type:'task', why: 'sous-tâche créée'};
+  
+  // Error detection keywords
+  const errors = ['erreur','oublie','raté','fail','incorrect','faux','bug','manque'];
+  if(state.autoMode === 'full' || state.autoMode === 'smart'){
+    for(const e of errors){
+      if(r.includes('--status--') && r.includes(e)){
+        return {type:'fix', why: `erreur "${e}" détectée`};
+      }
+    }
   }
-} catch(e) {}
+  
+  // Full auto: always continue once if the response has --status-- but no --done--
+  if(state.autoMode === 'full' && r.includes('--status--') && !r.includes('--done--')){
+    return {type:'continue', why: 'tâche en cours non terminée'};
+  }
+  
+  return null;
+}
 
-function saveSettings() {
+// ═══════════════════════════════════════════════════
+// STREAM PARSER
+// ═══════════════════════════════════════════════════
+function parseChunk(chunk, fullText){
+  if(chunk.includes('--status--')||chunk.includes('--bash--')||chunk.includes('```')||chunk.includes('--done--')||chunk.includes('--continue--')){
+    parseMarkers(chunk, fullText);
+  } else {
+    appendToAssistant(chunk);
+  }
+}
+
+function parseMarkers(text, fullText){
+  const regex = /--status--\s*([^-]+)--|--bash--\s*([^\n]+)|```(\w*)\n|```|--done--|--continue--|--fix--|--task--\s*([^\n]+)/g;
+  let lastIdx = 0, match;
+
+  while((match = regex.exec(text)) !== null){
+    if(match.index > lastIdx){
+      appendToAssistant(text.substring(lastIdx, match.index));
+    }
+    lastIdx = match.index + match[0].length;
+
+    if(match[0].startsWith('--status--')){
+      const status = match[1] ? match[1].trim() : '...';
+      addMsg(`⚡ ${status}`, 'status');
+    }
+    else if(match[0].startsWith('--bash--')){
+      const cmd = match[2] ? match[2].trim() : '';
+      addMsg(`┌─ bash ─┐\n$ ${cmd}`, 'bash');
+      bridgePost('/bash?token='+state.token, {command: cmd}).then(r => {
+        if(r.output) addMsg(r.output.substring(0,500)+'...', 'bash');
+      });
+    }
+    else if(match[0].startsWith('```') && !inCodeBlock){
+      inCodeBlock = true; codeBuffer = '';
+    }
+    else if(match[0] === '```' && inCodeBlock){
+      inCodeBlock = false;
+      if(codeBuffer.trim()){
+        addMsg(codeBuffer, 'code');
+        state.history.push({role:'assistant',content:'\n```lua\n'+codeBuffer+'\n```'});
+      }
+      codeBuffer = '';
+    }
+    else if(match[0] === '--done--'){
+      if(!doneShown){ doneShown = true; addMsg('✅ Terminé', 'done'); }
+    }
+    else if(match[0].startsWith('--continue--') || match[0].startsWith('--fix--')){
+      addMsg('🔄 Auto-continuation...', 'auto');
+    }
+    else if(match[0].startsWith('--task--')){
+      const task = match[4] ? match[4].trim() : 'Tâche...';
+      addMsg(`📋 Sous-tâche: ${task}`, 'auto');
+      if(state.token) pushTask(task);
+    }
+  }
+  if(lastIdx < text.length){
+    appendToAssistant(text.substring(lastIdx));
+  }
+}
+
+function appendToAssistant(text){
+  if(!text) return;
+  if(inCodeBlock){ codeBuffer += text; return; }
+  if(!currentDiv) currentDiv = addMsg('', 'assistant');
+  currentDiv.textContent += text;
+  document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════
+// SETTINGS SAVE
+// ═══════════════════════════════════════════════════
+function saveSettings(){
   const key = document.getElementById('apiKey').value.trim();
-  if (key && !keys.includes(key)) keys.push(key);
-  else if (key && keys.length > 0) keys[0] = key;
-  currentModel = document.getElementById('model').value.trim() || currentModel;
-  fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  bridgeUrl = document.getElementById('bridgeUrl').value.trim() || bridgeUrl;
-  localStorage.setItem('vzlom_mobile_config', JSON.stringify({keys, model: currentModel, fallbacks, bridgeUrl}));
-  setStatus('✅ Config sauvegardée');
+  if(key && !state.keys.includes(key)) state.keys.push(key);
+  else if(key && state.keys.length > 0) state.keys[0] = key;
+  state.model = document.getElementById('model').value.trim() || state.model;
+  state.fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  state.autoMode = document.getElementById('autoMode').value;
+  
+  localStorage.setItem('vzlom_v2_config', JSON.stringify({
+    keys: state.keys, model: state.model,
+    fallbacks: state.fallbacks, autoMode: state.autoMode
+  }));
+  addMsg('✅ Config sauvegardée', 'system');
 }
 
-function switchTab(tab) {
-  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
-  if (tab === 'chat') {
-    document.getElementById('tabChat').classList.add('active');
-    document.getElementById('chat').style.display = 'flex';
-    document.getElementById('settings').classList.remove('show');
-    document.querySelector('.input-bar').style.display = 'flex';
-  } else if (tab === 'settings') {
-    document.getElementById('tabSettings').classList.add('active');
-    document.getElementById('chat').style.display = 'none';
-    document.getElementById('settings').classList.add('show');
-    document.querySelector('.input-bar').style.display = 'none';
-    document.getElementById('memoryCount').textContent = memoryLog.length + ' entrées';
-  }
-}
-
-function tabScripts() {
-  alert('📜 Bientôt : scripts sauvegardés + pont Advin.');
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-  setStatus('✅ Prêt — envoie un message');
+// Input key handler
+document.getElementById('input').addEventListener('keydown', function(e){
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
 });
+
+// Settings panel auto-saves on tab switch
+document.getElementById('apiKey').addEventListener('change', saveSettings);
+document.getElementById('model').addEventListener('change', saveSettings);
+document.getElementById('fallbacks').addEventListener('change', saveSettings);
+document.getElementById('autoMode').addEventListener('change', saveSettings);
+
+// Initial state
+setStatus('idle');
 </script>
 </body>
 </html>
