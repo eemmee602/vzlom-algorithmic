@@ -23,7 +23,7 @@
         <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}" 
                 BorderThickness="1" CornerRadius="4">
             <avalonedit:TextEditor x:Name="Editor"
-                                   SyntaxHighlighting="C#
+                                   SyntaxHighlighting="C#"
                                    FontFamily="Consolas"
                                    FontSize="14"
                                    ShowLineNumbers="True"
