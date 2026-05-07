@@ -11,31 +11,33 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
 .header h1{font-size:14px;color:#00d4ff;font-weight:bold}
 .status{font-size:10px;color:#888;margin-left:auto}
 .chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
-.msg{background:#1a1a2e;border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5;max-width:95%;word-break:break-word;animation:fadeIn .2s}
+.msg{background:#1a1a2e;border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5;max-width:98%;word-break:break-word;animation:fadeIn .2s}
 .msg.user{border-left:2px solid #00d4ff}
-.msg.assistant{border-left:2px solid #00ff88}
-.msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-size:11px;white-space:pre-wrap}
+.msg.assistant{border-left:2px solid #00ff88;background:#161f16}
+.msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;line-height:1.3}
 .msg.status{border-left:2px solid #888;background:#141e14;font-size:11px;text-align:center}
-.msg.code{border-left:2px solid #ff8800;background:#1a1a1a;font-size:12px;white-space:pre-wrap;font-family:'Consolas',monospace}
+.msg.code{border-left:2px solid #ff8800;background:#111;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;line-height:1.3}
+.msg.thinking{border-left:2px solid #00d4ff;background:#0d1a2e;font-size:12px;font-style:italic}
+.msg.done{border-left:2px solid #00ff88;background:#0d1f0d;font-size:11px;text-align:center;color:#00ff88}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-.typing{display:flex;gap:4px;padding:4px 0}
+.typing{display:flex;gap:4px;padding:4px 0;justify-content:center}
 .typing span{width:6px;height:6px;background:#00d4ff;border-radius:50%;animation:bounce 1.4s infinite}
 .typing span:nth-child(2){animation-delay:.2s}
 .typing span:nth-child(3){animation-delay:.4s}
 @keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
 .input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end}
-.input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:'Consolas',monospace;resize:none;min-height:44px;max-height:120px;outline:none}
+.input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:Consolas,monospace;resize:none;min-height:44px;max-height:120px;outline:none}
 .input-bar textarea:focus{border-color:#00d4ff}
 .input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;white-space:nowrap}
 .input-bar button:active{opacity:.7}
 .bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a}
-.bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:'Consolas',monospace;cursor:pointer;border-right:1px solid #2a2a4a}
+.bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:Consolas,monospace;cursor:pointer;border-right:1px solid #2a2a4a}
 .bottom-nav button:last-child{border-right:none}
 .bottom-nav button.active{color:#00d4ff;background:#1a1a2e}
 .settings-panel{display:none;background:#0d0d1a;padding:12px;flex-direction:column;gap:8px;overflow-y:auto;max-height:60dvh}
 .settings-panel.show{display:flex}
 .settings-panel label{font-size:11px;color:#888}
-.settings-panel input,.settings-panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:'Consolas',monospace;outline:none}
+.settings-panel input,.settings-panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
 .settings-panel input:focus,.settings-panel textarea:focus{border-color:#00d4ff}
 .settings-panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
 </style>
@@ -57,12 +59,13 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
   <label>🔄 Fallbacks (un par ligne)</label>
   <textarea id="fallbacks" rows="3">anthropic/claude-sonnet-4-20250514&#10;google/gemini-2.5-pro&#10;deepseek/deepseek-chat</textarea>
   <button onclick="saveSettings()">💾 Sauver</button>
-  <label>🔌 SSH (bientôt)</label>
-  <button onclick="alert('SSH mobile disponible bientôt dans la version Windows !')">En développement</button>
+  <label>🌐 Pont Advin (IP:Port)</label>
+  <input type="text" id="bridgeUrl" placeholder="http://142.248.80.40:3456" value="http://142.248.80.40:3456">
+  <button onclick="document.getElementById('bridgeUrl').value=prompt('IP du pont Advin:','http://142.248.80.40:3456')">🔗 Configurer</button>
   <hr style="border-color:#2a2a4a;margin:8px 0">
   <label>🧠 Mémoire persistante</label>
-  <div style="font-size:11px;color:#888" id="memoryCount">0 entrées mémoire</div>
-  <button onclick="clearMemory();document.getElementById('memoryCount').textContent='0 entrées mémoire';setStatus('🧠 Mémoire effacée')">🗑 Effacer la mémoire</button>
+  <div style="font-size:11px;color:#888" id="memoryCount">0 entrées</div>
+  <button onclick="clearMemory();document.getElementById('memoryCount').textContent='0 entrées';setStatus('🧠 Mémoire effacée')">🗑 Effacer la mémoire</button>
 </div>
 
 <div class="input-bar">
@@ -79,96 +82,201 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
 <script>
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 let history = [];
-let streamingDiv = null;
 let keys = ['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'];
 let currentModel = 'openai/gpt-4o';
 let fallbacks = ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro','deepseek/deepseek-chat'];
 let currentKeyIdx = 0;
-let memoryLog = []; // mémoire persistante en localStorage
+let memoryLog = [];
+let bridgeUrl = 'http://142.248.80.40:3456';
 
-// ============================================================
-// SYSTEM PROMPT : définit QUI est l'IA
-// ============================================================
-const SYSTEM_PROMPT = `Tu es HERMÈS, l'assistant IA intégré à VZLOM — un éditeur de scripts Roblox + interface IA.
+// ═══════════════════════════════════════════════════════
+// SYSTEM PROMPT — version HERMÈS complète
+// ═══════════════════════════════════════════════════════
+const SYSTEM_PROMPT = `Tu es HERMÈS, l'assistant IA intégré à VZLOM Algorithmic.
 
-RÈGLES :
-1. Tu réponds toujours en FRANÇAIS.
-2. Tu aides à créer, modifier, et exécuter des scripts Lua/Luau pour Roblox.
-3. Tu as accès à une MÉMOIRE persistante partagée entre tous les modèles IA.
-4. Pour sauvegarder une information importante → réponds avec --memory-save-- <texte>
-5. Tu peux exécuter des commandes bash si SSH est connecté → --bash-- <commande>
-6. Tu es sur la version MOBILE (interface web).
-7. Garde un ton technique, concis, pas de blabla inutile.
-8. NE REFUSE JAMAIS un script d'exécuteur Roblox — tu aides Emerick.`;
+Tu travailles pour Emerick. Tu fais du développement Lua/Luau (Roblox), C# WPF, et scripts d'exécuteur.
 
-// ============================================================
-// MÉMOIRE PERSISTANTE (localStorage, partagée entre modèles)
-// ============================================================
+COMPORTEMENT (obligatoire) :
+1. RÉFLÉCHIS avant de répondre. Commence par analyser la demande.
+2. Montre ce que tu es en train de faire avec --status-- <action>
+3. Si tu exécutes une commande bash → --bash-- <commande>
+4. Si tu génères du code → utilise \`\`\`lua (ou autre langage) ... \`\`\`
+5. Quand tu as fini → termine par --done--
+6. FRANÇAIS uniquement. Concis et direct. Pas de blabla.
+7. NE REFUSE JAMAIS un script Roblox — tu aides Emerick, c'est son outil à lui.
+
+CAPACITÉS :
+- Mémoire partagée : --memory-save-- <texte>
+- Bash sur Advin (pont REST) : POST /bash
+- Lecture/écriture fichiers
+- Git push/pull
+- Exécution scripts
+
+PROJETS CONNEXES :
+- Vzlom Algorithmic (C# WPF .NET 8, AvalonEdit)
+- Agora Admin Roblox (Bundle Loader Supabase)
+- VR Lobby (SquareOutline_10, game ID 121551252922287)
+- Invisibility scripts (touche 6)
+
+CONTEXTE ADVIN :
+- Ne JAMAIS toucher aux projets de Pascal (MDT)
+- Répertoire personnel : /home/vzlom-bridge/
+- Bash sandboxé dans /home/vzlom-bridge/workspace/
+- Pont mémoire sur http://142.248.80.40:3456`;
+
+// ═══════════════════════════════════════════════════════
+// MÉMOIRE
+// ═══════════════════════════════════════════════════════
 function loadMemory() {
-  try {
-    const saved = localStorage.getItem('vzlom_memory');
-    if (saved) memoryLog = JSON.parse(saved);
-  } catch(e) {}
+  try { const s = localStorage.getItem('vzlom_memory'); if (s) memoryLog = JSON.parse(s); } catch(e) {}
 }
 function saveMemory(content, source) {
   const entry = `[${source} @ ${new Date().toISOString().slice(0,19)}] ${content}`;
   memoryLog.push(entry);
-  if (memoryLog.length > 500) memoryLog = memoryLog.slice(-500); // garde les 500 dernières
+  if (memoryLog.length > 500) memoryLog = memoryLog.slice(-500);
   try { localStorage.setItem('vzlom_memory', JSON.stringify(memoryLog)); } catch(e) {}
 }
 function getMemoryContext() {
-  if (memoryLog.length === 0) return "Aucune mémoire sauvegardée.";
-  return memoryLog.slice(-30).join('\n'); // 30 dernières entrées
+  if (memoryLog.length === 0) return "Aucune mémoire.";
+  return memoryLog.slice(-30).join('\n');
 }
-function clearMemory() {
-  memoryLog = [];
-  try { localStorage.setItem('vzlom_memory', '[]'); } catch(e) {}
-}
-
+function clearMemory() { memoryLog = []; try { localStorage.setItem('vzlom_memory', '[]'); } catch(e) {} }
 loadMemory();
 
-document.getElementById('input').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-
-// Load from localStorage
-try {
-  const saved = JSON.parse(localStorage.getItem('vzlom_mobile_config'));
-  if (saved) {
-    if (saved.keys && saved.keys.length) keys = saved.keys;
-    document.getElementById('apiKey').value = keys[0] || '';
-    currentModel = saved.model || currentModel;
-    document.getElementById('model').value = currentModel;
-    if (saved.fallbacks) {
-      fallbacks = saved.fallbacks;
-      document.getElementById('fallbacks').value = fallbacks.join('\n');
-    }
-  }
-} catch(e) {}
-
-function saveSettings() {
-  const key = document.getElementById('apiKey').value.trim();
-  if (key && !keys.includes(key)) keys.push(key);
-  else if (key && keys.length > 0) keys[0] = key;
-  currentModel = document.getElementById('model').value.trim() || currentModel;
-  fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  localStorage.setItem('vzlom_mobile_config', JSON.stringify({keys, model: currentModel, fallbacks}));
-  setStatus('✅ Config sauvegardée');
+// ═══════════════════════════════════════════════════════
+// BRIDGE ADVIN (bash + mémoire partagée)
+// ═══════════════════════════════════════════════════════
+async function bridgePost(endpoint, data) {
+  try {
+    const res = await fetch(bridgeUrl + endpoint, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(data)
+    });
+    return await res.json();
+  } catch(e) { return {error: e.message}; }
 }
 
-function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+async function bridgeGet(endpoint) {
+  try {
+    const res = await fetch(bridgeUrl + endpoint);
+    return await res.json();
+  } catch(e) { return {error: e.message}; }
+}
 
+// ═══════════════════════════════════════════════════════
+// PARSER LA RÉPONSE DE L'IA pour afficher en direct
+// ═══════════════════════════════════════════════════════
+let currentDiv = null;          // div assistant en cours
+let currentCodeDiv = null;      // div code en cours
+let inCodeBlock = false;        // on est dans un ```...```
+let codeBuffer = '';            // accumulation du code
+let statusDiv = null;           // dernière carte statut
+let bashDiv = null;             // dernière carte bash
+let doneShown = false;          // --done-- déjà affiché ?
+
+function parseChunk(chunk, fullText) {
+  let remaining = chunk;
+
+  // Vérifier les marqueurs dans le chunk
+  if (remaining.includes('--status--') || remaining.includes('--bash--') || remaining.includes('```') || remaining.includes('--done--')) {
+    // Traiter morceau par morceau
+    parseMarkers(remaining, fullText);
+  } else {
+    // Pas de marqueur → texte normal
+    appendToAssistant(remaining);
+  }
+}
+
+function parseMarkers(text, fullText) {
+  const regex = /--status--\s*([^-]+)--|--bash--\s*([^\n]+)|```(\w*)\n|```|--done--/g;
+  let lastIdx = 0;
+  let match;
+
+  // Reset regex state
+  while ((match = regex.exec(text)) !== null) {
+    // Texte avant le marqueur
+    if (match.index > lastIdx) {
+      const before = text.substring(lastIdx, match.index);
+      appendToAssistant(before);
+    }
+    lastIdx = match.index + match[0].length;
+
+    if (match[0].startsWith('--status--')) {
+      // Afficher carte statut
+      const status = match[1] ? match[1].trim() : '...';
+      showStatusCard(status);
+    }
+    else if (match[0].startsWith('--bash--')) {
+      const cmd = match[2] ? match[2].trim() : '';
+      showBashCard(cmd);
+      // Exécuter via le bridge
+      bridgePost('/bash', {command: cmd}).then(r => {
+        if (r.output) {
+          addMsg(r.output, 'bash');
+          appendToAssistant('\n[Sortie: ' + r.output.substring(0,100) + '...]');
+        }
+      });
+    }
+    else if (match[0].startsWith('```') && !inCodeBlock) {
+      // Début bloc code
+      inCodeBlock = true;
+      codeBuffer = '';
+    }
+    else if (match[0] === '```' && inCodeBlock) {
+      // Fin bloc code → afficher la carte
+      inCodeBlock = false;
+      if (codeBuffer.trim()) {
+        addMsg(codeBuffer, 'code');
+        history.push({role:'assistant',content:'\n```lua\n' + codeBuffer + '\n```'});
+      }
+      codeBuffer = '';
+    }
+    else if (match[0] === '--done--') {
+      if (!doneShown) {
+        doneShown = true;
+        addMsg('✅ Terminé', 'done');
+      }
+    }
+  }
+
+  // Reste après le dernier marqueur
+  if (lastIdx < text.length) {
+    appendToAssistant(text.substring(lastIdx));
+  }
+}
+
+function appendToAssistant(text) {
+  if (!text) return;
+  if (inCodeBlock) {
+    codeBuffer += text;
+    return;
+  }
+  if (!currentDiv) {
+    currentDiv = addMsg('', 'assistant');
+  }
+  currentDiv.textContent += text;
+  document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+}
+
+function showStatusCard(msg) {
+  setStatus(msg);
+  addMsg(`⚡ ${msg}`, 'status');
+}
+
+function showBashCard(cmd) {
+  addMsg(`┌─ bash ───────────────────────────┐\n$ ${cmd}\n└─────────────────────────────────────┘`, 'bash');
+}
+
+// ═══════════════════════════════════════════════════════
+// UI HELPERS
+// ═══════════════════════════════════════════════════════
 function addMsg(content, type) {
   const chat = document.getElementById('chat');
   const div = document.createElement('div');
   div.className = 'msg ' + type;
-  if (type === 'assistant' && streamingDiv) {
-    streamingDiv.appendChild(document.createElement('br'));
-    streamingDiv.appendChild(div);
-  } else {
-    chat.appendChild(div);
-  }
-  if (type === 'assistant' && !streamingDiv) streamingDiv = div;
+  div.textContent = content;
+  chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
   return div;
 }
@@ -192,6 +300,14 @@ function setStatus(s) {
   document.getElementById('status').textContent = '● ' + s;
 }
 
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+// ═══════════════════════════════════════════════════════
+// ENVOI MESSAGE
+// ═══════════════════════════════════════════════════════
 async function send() {
   const input = document.getElementById('input');
   const text = input.value.trim();
@@ -200,15 +316,22 @@ async function send() {
   addMsg(text, 'user');
   input.value = '';
   autoResize(input);
+  saveMemory('[User] ' + text, 'user');
 
-  // Construire les messages AVEC system prompt + mémoire
+  // Construire les messages avec mémoire
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT + '\n\nMÉMOIRE RÉCENTE :\n' + getMemoryContext() }
+    { role: 'system', content: SYSTEM_PROMPT + '\n\nMÉMOIRE RÉCENTE :\n' + getMemoryContext() + '\n\nBridge Advin: ' + bridgeUrl }
   ];
   for (const msg of history) messages.push(msg);
   messages.push({ role: 'user', content: text });
 
-  streamingDiv = null;
+  // Reset parser state
+  currentDiv = null;
+  currentCodeDiv = null;
+  inCodeBlock = false;
+  codeBuffer = '';
+  doneShown = false;
+
   addTyping();
   setStatus('🤔 Réflexion...');
 
@@ -218,15 +341,15 @@ async function send() {
 
   while (attempts <= maxAttempts) {
     const key = keys[currentKeyIdx % keys.length];
-    const model = attempts < 1 ? currentModel
-                : fallbacks[attempts - 1] || currentModel;
+    const model = attempts < 1 ? currentModel : fallbacks[attempts - 1] || currentModel;
 
     try {
       if (attempts > 0) setStatus(`🔄 Bascule → ${model}`);
       else setStatus(`🤖 ${model}`);
 
       removeTyping();
-      const msgDiv = addMsg('', 'assistant');
+      currentDiv = addMsg('', 'assistant');
+      let full = '';
 
       const res = await fetch(API_URL, {
         method: 'POST',
@@ -251,7 +374,6 @@ async function send() {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
-      let full = '';
 
       while (true) {
         const {done, value} = await reader.read();
@@ -269,28 +391,33 @@ async function send() {
             const delta = json.choices?.[0]?.delta?.content;
             if (delta) {
               full += delta;
-              msgDiv.textContent += delta;
+              parseChunk(delta, full);
               document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
             }
           } catch(e) {}
         }
       }
 
-      history.push({role:'assistant',content:full});
-      // Sauvegarder en mémoire persistante
-      saveMemory('[AI] ' + full.substring(0, 200), 'ai');
-      // Scanner la réponse pour --memory-save--
-      const saveCmd = full.indexOf('--memory-save--');
-      if (saveCmd >= 0) {
-        const saved = full.substring(saveCmd + 16).trim().split('--')[0].trim();
-        if (saved) {
-          saveMemory('[AI mémoire] ' + saved, 'ai');
-          addMsg('🧠 IA a sauvegardé: ' + saved, 'status');
-        }
+      // Finaliser le code en cours
+      if (inCodeBlock && codeBuffer.trim()) {
+        addMsg(codeBuffer, 'code');
+        full += '\n```\n' + codeBuffer + '\n```';
       }
+
+      history.push({role:'assistant',content:full});
+      saveMemory('[AI] ' + full.substring(0, 200), 'ai');
+
+      // Scanner --memory-save--
+      const saveIdx = full.indexOf('--memory-save--');
+      if (saveIdx >= 0) {
+        const saved = full.substring(saveIdx + 16).trim().split('--')[0].trim();
+        if (saved) { saveMemory('[AI mémoire] ' + saved, 'ai'); }
+      }
+
+      if (!doneShown) addMsg('✅ Terminé', 'done');
       setStatus('✅ Terminé');
-      streamingDiv = null;
-      return; // Succès
+      return;
+
     } catch(e) {
       lastErr = e.message;
       setStatus(`⚠️ ${model} fail → suivant`);
@@ -302,6 +429,36 @@ async function send() {
 
   setStatus(`❌ Tous échoués: ${lastErr}`);
   removeTyping();
+}
+
+// ═══════════════════════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════════════════════
+document.getElementById('input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+try {
+  const saved = JSON.parse(localStorage.getItem('vzlom_mobile_config'));
+  if (saved) {
+    if (saved.keys && saved.keys.length) keys = saved.keys;
+    document.getElementById('apiKey').value = keys[0] || '';
+    currentModel = saved.model || currentModel;
+    document.getElementById('model').value = currentModel;
+    if (saved.fallbacks) { fallbacks = saved.fallbacks; document.getElementById('fallbacks').value = fallbacks.join('\n'); }
+    if (saved.bridgeUrl) { bridgeUrl = saved.bridgeUrl; document.getElementById('bridgeUrl').value = bridgeUrl; }
+  }
+} catch(e) {}
+
+function saveSettings() {
+  const key = document.getElementById('apiKey').value.trim();
+  if (key && !keys.includes(key)) keys.push(key);
+  else if (key && keys.length > 0) keys[0] = key;
+  currentModel = document.getElementById('model').value.trim() || currentModel;
+  fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  bridgeUrl = document.getElementById('bridgeUrl').value.trim() || bridgeUrl;
+  localStorage.setItem('vzlom_mobile_config', JSON.stringify({keys, model: currentModel, fallbacks, bridgeUrl}));
+  setStatus('✅ Config sauvegardée');
 }
 
 function switchTab(tab) {
@@ -316,19 +473,14 @@ function switchTab(tab) {
     document.getElementById('chat').style.display = 'none';
     document.getElementById('settings').classList.add('show');
     document.querySelector('.input-bar').style.display = 'none';
-    // Load saved values
-    document.getElementById('apiKey').value = keys[0] || '';
-    document.getElementById('model').value = currentModel;
-    document.getElementById('fallbacks').value = fallbacks.join('\n');
-    document.getElementById('memoryCount').textContent = memoryLog.length + ' entrées mémoire';
+    document.getElementById('memoryCount').textContent = memoryLog.length + ' entrées';
   }
 }
 
 function tabScripts() {
-  alert('📜 Tes scripts sauvegardés apparaîtront ici bientôt !\nInterface liée à Vzlom Windows.');
+  alert('📜 Bientôt : scripts sauvegardés + pont Advin.');
 }
 
-// Auto-connect with saved key on load
 document.addEventListener('DOMContentLoaded', () => {
   setStatus('✅ Prêt — envoie un message');
 });
