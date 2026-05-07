@@ -3,698 +3,416 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-<title>Vzlom Mobile v2</title>
+<title>Vzlom Mobile</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden;position:relative}
-
-/* Stars background */
+body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 #stars-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
-/* Login screen */
-.login-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px}
-.login-overlay.hidden{display:none}
-.login-overlay h1{font-size:22px;color:#00d4ff;margin-bottom:4px}
-.login-overlay p{font-size:11px;color:#666;margin-bottom:8px}
-.login-overlay input{width:100%;max-width:300px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:8px;padding:12px;font-size:14px;font-family:Consolas,monospace;outline:none;text-align:center}
-.login-overlay input:focus{border-color:#00d4ff}
-.login-overlay .btn-row{display:flex;gap:8px;width:100%;max-width:300px}
-.login-overlay button{flex:1;background:#00d4ff;color:#000;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:bold;cursor:pointer;font-family:Consolas,monospace}
-.login-overlay button.secondary{background:#1a1a2e;color:#888;border:1px solid #2a2a4a}
-.login-overlay .login-error{font-size:11px;color:#ff4444;margin-top:-8px;min-height:16px}
-.login-overlay .register-link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline}
+/* Screens */
+.screen{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;background:#0d0d1a;transition:opacity .3s}
+.screen.hidden{opacity:0;pointer-events:none}
+.screen h1{font-size:22px;color:#00d4ff}
+.screen .sub{font-size:10px;color:#666;margin-bottom:8px}
+.screen input{width:100%;max-width:280px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:8px;padding:12px;font-size:14px;font-family:Consolas,monospace;outline:none;text-align:center}
+.screen input:focus{border-color:#00d4ff}
+.screen .btn-row{display:flex;gap:8px;width:100%;max-width:280px}
+.screen button{flex:1;background:#00d4ff;color:#000;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:bold;cursor:pointer;font-family:Consolas,monospace}
+.screen button.sec{background:#1a1a2e;color:#888;border:1px solid #2a2a4a}
+.screen .err{font-size:11px;color:#ff4444;min-height:18px;max-width:280px;text-align:center}
+.screen .link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline;margin-top:4px}
 
-/* Main app */
-.app{flex:1;display:flex;flex-direction:column;position:relative;z-index:1;opacity:0;transition:opacity .4s}
-.app.visible{opacity:1}
-
-.header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a;flex-shrink:0}
-.header h1{font-size:14px;color:#00d4ff;font-weight:bold}
-.header .status-area{font-size:10px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px}
-.header .status-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
-
-.status-dot-idle{background:#888}
-.status-dot-thinking{background:#00d4ff;animation:pulse 0.8s ease-in-out infinite}
-.status-dot-working{background:#ffb90f;animation:pulse 0.6s ease-in-out infinite}
-.status-dot-error{background:#ff4444}
-.status-dot-done{background:#00ff88}
-
-.thinking-word{font-size:10px;color:#00d4ff;font-weight:bold;min-width:80px;text-align:right;transition:all .3s}
+/* App */
+.app{flex:1;display:flex;flex-direction:column;z-index:1;position:relative;opacity:0;transition:opacity .3s}
+.app.show{opacity:1}
+.header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a}
+.header h1{font-size:14px;color:#00d4ff}
+.header .right{font-size:10px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px}
+.header .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.dot.idle{background:#888}.dot.think{background:#00d4ff;animation:pulse .8s ease-in-out infinite}.dot.work{background:#ffb90f;animation:pulse .6s ease-in-out infinite}.dot.err{background:#ff4444}.dot.done{background:#00ff88}
+.tword{font-size:10px;color:#00d4ff;font-weight:bold;min-width:70px;text-align:right}
+@keyframes pulse{0%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}100%{opacity:.3;transform:scale(.8)}}
 
 .chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
 .msg{background:#1a1a2e;border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5;max-width:98%;word-break:break-word;animation:fadeIn .2s}
 .msg.user{border-left:2px solid #00d4ff}
 .msg.assistant{border-left:2px solid #00ff88;background:#161f16}
-.msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap;line-height:1.3}
+.msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap}
 .msg.status{border-left:2px solid #888;background:#141e14;font-size:11px;text-align:center}
-.msg.code{border-left:2px solid #ff8800;background:#111;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap;line-height:1.3}
+.msg.code{border-left:2px solid #ff8800;background:#111;font-family:Consolas,monospace;font-size:12px;white-space:pre-wrap}
 .msg.done{border-left:2px solid #00ff88;background:#0d1f0d;font-size:11px;text-align:center;color:#00ff88}
-.msg.system{font-size:10px;color:#666;text-align:center;border-left:2px solid transparent;padding:4px 8px}
-.msg.auto{border-left:2px solid #ff00ff;background:#1a0d1a;font-size:11px;color:#ddaaff}
-.msg.splash{font-size:10px;color:#00d4ff;background:transparent;text-align:center;border:none;padding:2px;animation:glowPulse 1s ease-in-out infinite}
-@keyframes glowPulse{0%,100%{opacity:.4}50%{opacity:.8}}
-
+.msg.sys{font-size:10px;color:#666;text-align:center;border-left:2px solid transparent;padding:4px 8px}
+.msg.auto{border-left:2px solid #f0f;background:#1a0d1a;font-size:11px;color:#daf}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%{opacity:0.3;transform:scale(0.8)}50%{opacity:1;transform:scale(1.2)}100%{opacity:0.3;transform:scale(0.8)}}
 
-.thinking-dots{display:inline-flex;gap:4px;margin-left:4px}
-.thinking-dots span{width:5px;height:5px;background:#00d4ff;border-radius:50%;animation:bounce 1.2s ease-in-out infinite}
-.thinking-dots span:nth-child(2){animation-delay:0.2s}
-.thinking-dots span:nth-child(3){animation-delay:0.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
-
-.input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end;flex-shrink:0}
+.input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end}
 .input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:Consolas,monospace;resize:none;min-height:44px;max-height:120px;outline:none}
 .input-bar textarea:focus{border-color:#00d4ff}
-.input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;white-space:nowrap}
+.input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer}
 
-.bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a;flex-shrink:0}
+.bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a}
 .bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:Consolas,monospace;cursor:pointer;border-right:1px solid #2a2a4a}
-.bottom-nav button:last-child{border-right:none}
-.bottom-nav button.active{color:#00d4ff;background:#1a1a2e}
+.bottom-nav button.on{color:#00d4ff;background:#1a1a2e}
 
 .panel{display:none;background:#0d0d1a;padding:12px;flex-direction:column;gap:8px;overflow-y:auto;flex:1}
 .panel.show{display:flex}
 .panel label{font-size:11px;color:#888}
-.panel input,.panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
-.panel input:focus,.panel textarea:focus{border-color:#00d4ff}
+.panel input,.panel select,.panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
 .panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
-.panel .user-info{font-size:12px;color:#00ff88;padding:8px;background:#1a1a2e;border-radius:4px;display:flex;align-items:center;gap:6px}
-.panel .user-info button{margin-left:auto;padding:4px 10px;font-size:10px;background:#ff4444;width:auto}
-
-/* Star particle */
-.star{position:fixed;pointer-events:none;z-index:0;border-radius:50%;background:#fff;animation:twinkle var(--dur) ease-in-out infinite}
-@keyframes twinkle{0%,100%{opacity:0}50%{opacity:var(--max-op)}}
+.panel .user-info{font-size:12px;color:#0f8;padding:8px;background:#1a1a2e;border-radius:4px;display:flex;align-items:center;gap:6px}
 </style>
 </head>
 <body>
 
 <canvas id="stars-canvas"></canvas>
 
-<!-- Login -->
-<div class="login-overlay" id="loginScreen">
+<!-- Screen 1: Login -->
+<div class="screen" id="sLogin">
   <h1>🖥️ VZLOM</h1>
-  <p style="color:#666;font-size:10px;margin-top:-4px">Connexion</p>
-  <input type="text" id="loginNickname" placeholder="Surnom" autocomplete="off">
-  <input type="password" id="loginPassword" placeholder="Mot de passe" autocomplete="off">
-  <div class="login-error" id="loginError"></div>
+  <p class="sub">Connexion</p>
+  <input type="text" id="inNick" placeholder="Surnom" autocomplete="off">
+  <input type="password" id="inPass" placeholder="Mot de passe" autocomplete="off">
+  <div class="err" id="errLogin"></div>
   <div class="btn-row">
-    <button onclick="doLogin()" id="loginBtn">🔑 Connexion</button>
-    <button class="secondary" onclick="doRegister()" id="registerBtn">📝 Créer</button>
+    <button onclick="login()">🔑 Connexion</button>
+    <button class="sec" onclick="showRegister()">📝 Créer</button>
   </div>
-  <div class="login-overlay" id="registerForm" style="display:none;position:static;padding:0;gap:8px;z-index:101">
-    <input type="text" id="regNickname" placeholder="Surnom" autocomplete="off" style="max-width:300px">
-    <input type="password" id="regPassword" placeholder="Mot de passe" autocomplete="off" style="max-width:300px">
-    <div class="btn-row" style="max-width:300px">
-      <button onclick="doRegisterSubmit()">✅ Créer mon compte</button>
-      <button class="secondary" onclick="cancelRegister()">← Retour</button>
-    </div>
-    <div id="regError" style="font-size:11px;color:#ff4444;min-height:16px"></div>
+</div>
+
+<!-- Screen 2: Register (separate, not nested) -->
+<div class="screen hidden" id="sRegister">
+  <h1>📝 Créer un compte</h1>
+  <p class="sub">Vzlom</p>
+  <input type="text" id="inRegNick" placeholder="Surnom" autocomplete="off">
+  <input type="password" id="inRegPass" placeholder="Mot de passe" autocomplete="off">
+  <div class="err" id="errReg"></div>
+  <div class="btn-row">
+    <button onclick="register()">✅ Créer</button>
+    <button class="sec" onclick="hideRegister()">← Retour</button>
   </div>
 </div>
 
 <!-- Main App -->
 <div class="app" id="app">
   <div class="header">
-    <span style="font-size:18px">🖥️</span>
-    <h1>VZLOM <span id="userBadge" style="font-size:9px;color:#00ff88"></span></h1>
-    <div class="status-area">
-      <span class="thinking-word" id="thinkingWord">Prêt</span>
-      <span class="status-dot status-dot-idle" id="statusDot"></span>
+    <span>🖥️</span>
+    <h1>VZLOM <span id="userBadge" style="font-size:9px;color:#0f8"></span></h1>
+    <div class="right">
+      <span class="tword" id="tword">Prêt</span>
+      <span class="dot idle" id="sdot"></span>
     </div>
   </div>
-
   <div class="chat" id="chat"></div>
-
-  <div class="panel" id="settingsPanel">
-    <div class="user-info" id="userInfo">
-      <span>👤 <span id="panelNickname">—</span></span>
-      <button onclick="doLogout()">🚪 Quitter</button>
-    </div>
-    <label>🔑 Clé API OpenRouter</label>
-    <input type="password" id="apiKey" placeholder="sk-or-v1-...">
+  <div class="panel" id="panel">
+    <div class="user-info">👤 <span id="pnNick">—</span> <button onclick="logout()" style="margin-left:auto;padding:4px 8px;font-size:10px;background:#f44;width:auto">🚪</button></div>
+    <label>🔑 Clé API</label>
+    <input type="password" id="inKey" placeholder="sk-or-v1-...">
     <label>🤖 Modèle</label>
-    <input type="text" id="model" value="openai/gpt-4o">
-    <label>🔄 Fallbacks (un par ligne)</label>
-    <textarea id="fallbacks" rows="2">anthropic/claude-sonnet-4-20250514&#10;google/gemini-2.5-pro</textarea>
-    <label>⚙ Mode agent auto (continue tout seul)</label>
-    <select id="autoMode" style="background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-family:Consolas,monospace">
-      <option value="off">❌ Désactivé</option>
-      <option value="smart" selected>🧠 Smart (correction + tâches)</option>
-      <option value="full">🤖 Full auto (max 5 itérations)</option>
+    <input type="text" id="inModel" value="openai/gpt-4o">
+    <label>🔄 Fallbacks</label>
+    <textarea id="inFall" rows="2">anthropic/claude-sonnet-4-20250514</textarea>
+    <label>⚙ Auto-agent</label>
+    <select id="inAuto">
+      <option value="off">❌ Off</option>
+      <option value="smart" selected>🧠 Smart (correction+tâches)</option>
+      <option value="full">🤖 Full (max 5 iters)</option>
     </select>
-    <label>🧠 Ma mémoire (<span id="memCount">0</span> entrées)</label>
-    <button onclick="clearMyMemory()">🗑 Effacer ma mémoire</button>
-    <button onclick="syncMemory()" style="background:#1a1a2e;color:#888;border:1px solid #2a2a4a">🔄 Sync mémoire Advin</button>
+    <label>🧠 Ma mémoire</label>
+    <button onclick="syncMem()">🔄 Sync</button>
+    <button onclick="addMsg('🗑 Effacé (local)','sys')" style="background:#1a1a2e;color:#888;border:1px solid #2a2a4a">🗑 Effacer</button>
   </div>
-
   <div class="input-bar">
-    <textarea id="input" placeholder="Écris ton message..." rows="1" oninput="autoResize(this)"></textarea>
-    <button id="sendBtn" onclick="send()">⏎</button>
+    <textarea id="inTxt" placeholder="Écris..." rows="1" oninput="x(this)"></textarea>
+    <button id="btnSend" onclick="send()">⏎</button>
   </div>
-
   <div class="bottom-nav">
-    <button id="tabChat" class="active" onclick="switchTab('chat')">💬 Chat</button>
-    <button id="tabSettings" onclick="switchTab('settings')">⚙ Config</button>
+    <button id="tbChat" class="on" onclick="tab('chat')">💬 Chat</button>
+    <button id="tbCfg" onclick="tab('cfg')">⚙ Config</button>
     <button onclick="logout()">🚪</button>
   </div>
 </div>
 
 <script>
-// ═══════════════════════════════════════════════════
-// STARS
-// ═══════════════════════════════════════════════════
-;(function initStars(){
-  const c = document.getElementById('stars-canvas');
-  const ctx = c.getContext('2d');
-  c.width = window.innerWidth;
-  c.height = window.innerHeight;
-  const stars = [];
-  for(let i=0;i<80;i++){
-    stars.push({
-      x: Math.random()*c.width, y: Math.random()*c.height,
-      r: Math.random()*1.5+0.3,
-      o: Math.random()*0.4+0.1,
-      s: Math.random()*0.02+0.005,
-      phase: Math.random()*Math.PI*2
-    });
-  }
-  function draw(){
-    ctx.clearRect(0,0,c.width,c.height);
-    const t = Date.now()/1000;
-    for(const s of stars){
-      const alpha = s.o + Math.sin(t*s.s + s.phase)*s.o*0.5;
-      ctx.beginPath();
-      ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
-      ctx.fillStyle = `rgba(180,220,255,${Math.max(0,Math.min(1,alpha))})`;
-      ctx.fill();
-    }
-    requestAnimationFrame(draw);
-  }
-  draw();
-  window.addEventListener('resize',()=>{c.width=window.innerWidth;c.height=window.innerHeight});
+// Canvas stars
+;(function(){
+  const c=document.getElementById('stars-canvas'),ctx=c.getContext('2d');
+  c.width=innerWidth;c.height=innerHeight;
+  const s=[];for(let i=80;i--;)s.push({x:Math.random()*c.width,y:Math.random()*c.height,r:Math.random()*1.5+.3,o:Math.random()*.4+.1,sp:Math.random()*.02+.005,ph:Math.random()*Math.PI*2});
+  function d(){ctx.clearRect(0,0,c.width,c.height);const t=Date.now()/1e3;for(const a of s){const al=a.o+Math.sin(t*a.sp+a.ph)*a.o*.5;ctx.beginPath();ctx.arc(a.x,a.y,a.r,0,Math.PI*2);ctx.fillStyle=`rgba(180,220,255,${Math.max(0,Math.min(1,al))})`;ctx.fill()}requestAnimationFrame(d)}
+  d();addEventListener('resize',()=>{c.width=innerWidth;c.height=innerHeight});
 })();
 
-// ═══════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════
-const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const BRIDGE = 'http://142.248.80.40:3456';
+// State
+const BRIDGE='http://142.248.80.40:3456',API='https://openrouter.ai/api/v1/chat/completions';
+let S={token:'',nick:'',keys:['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'],model:'openai/gpt-4o',falls:[],auto:'smart',history:[],ki:0,busy:false,iters:0,maxIters:5};
+const WORDS=['Thinking...','Analyzing...','Reading...','Beaming...','Imagining...','Coding...','Searching...','Scanning...','Synthesizing...','Crafting...','Forging...','Mapping...'];
+let twInt=null;
 
-let state = {
-  token: null,
-  nickname: null,
-  keys: ['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'],
-  model: 'openai/gpt-4o',
-  fallbacks: ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro'],
-  autoMode: 'smart',
-  history: [],
-  memoryLog: [],
-  currentKeyIdx: 0,
-  isProcessing: false,
-  autoIterations: 0,
-  maxAutoIterations: 5,
-};
+function twStart(){let i=0;const e=document.getElementById('tword');e.textContent='Thinking...';e.style.color='#0df';twInt=setInterval(()=>{i=(i+1)%WORDS.length;e.textContent=WORDS[i]},1200)}
+function twStop(){if(twInt){clearInterval(twInt);twInt=null}document.getElementById('tword').textContent='Prêt';document.getElementById('tword').style.color='#888'}
+function sdot(c){document.getElementById('sdot').className='dot '+c}
 
-// Thinking words display
-const THINKING_WORDS = [
-  'Thinking...','Analyzing...','Reading...','Beaming...','Imagining...',
-  'Coding...','Searching...','Scanning...','Weaving...','Crafting...',
-  'Forging...','Synthesizing...','Reasoning...','Building...','Designing...',
-  'Processing...','Compiling...','Decoding...','Mapping...','Generating...'
-];
-let twInterval = null;
-
-function startThinkingWords(){
-  let i = 0;
-  document.getElementById('thinkingWord').textContent = THINKING_WORDS[0];
-  document.getElementById('thinkingWord').style.color = '#00d4ff';
-  twInterval = setInterval(()=>{
-    i = (i+1) % THINKING_WORDS.length;
-    document.getElementById('thinkingWord').textContent = THINKING_WORDS[i];
-  }, 1200);
-}
-function stopThinkingWords(){
-  if(twInterval){clearInterval(twInterval);twInterval=null}
-  document.getElementById('thinkingWord').textContent = 'Prêt';
-  document.getElementById('thinkingWord').style.color = '#888';
-}
-function setStatus(type){
-  const dot = document.getElementById('statusDot');
-  dot.className = 'status-dot ' + type;
-}
-
-// ═══════════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════════
-function showLoginError(msg){
-  document.getElementById('loginError').textContent = msg;
-}
-
-async function bridgePost(path, body, needsAuth){
+async function bp(path,body){
   try{
-    const opts = {method:'POST',headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)};
-    const url = needsAuth && state.token ? `${BRIDGE}${path}?token=${state.token}` : `${BRIDGE}${path}`;
-    const res = await fetch(url, opts);
-    return await res.json();
-  }catch(e){ return {error: e.message}; }
+    const o={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+    const u=S.token?`${BRIDGE}${path}?token=${S.token}`:`${BRIDGE}${path}`;
+    const r=await fetch(u,o);return await r.json();
+  }catch(e){return{error:e.message||'Erreur réseau'}}
 }
 
-async function doLogin(){
-  const nick = document.getElementById('loginNickname').value.trim();
-  const pass = document.getElementById('loginPassword').value.trim();
-  if(!nick||!pass){showLoginError('Surnom + mot de passe requis');return}
-  const r = await bridgePost('/auth/login', {nickname:nick, password:pass});
-  if(r.error){showLoginError(r.error);return}
-  state.token = r.token;
-  state.nickname = r.nickname;
+// Auth
+function showRegister(){
+  document.getElementById('sLogin').classList.add('hidden');
+  document.getElementById('sRegister').classList.remove('hidden');
+}
+function hideRegister(){
+  document.getElementById('sRegister').classList.add('hidden');
+  document.getElementById('sLogin').classList.remove('hidden');
+}
+
+async function login(){
+  const n=document.getElementById('inNick').value.trim(),p=document.getElementById('inPass').value.trim();
+  if(!n||!p){document.getElementById('errLogin').textContent='Champs requis';return}
+  document.getElementById('errLogin').textContent='⏳ Connexion...';
+  const r=await bp('/auth/login',{nickname:n,password:p});
+  if(r.error){document.getElementById('errLogin').textContent=r.error;return}
+  S.token=r.token;S.nick=r.nickname;
   afterLogin();
 }
 
-async function doRegister(){
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('registerForm').style.display = 'flex';
-}
-function cancelRegister(){
-  document.getElementById('registerForm').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
-}
-
-async function doRegisterSubmit(){
-  const nick = document.getElementById('regNickname').value.trim();
-  const pass = document.getElementById('regPassword').value.trim();
-  if(!nick||!pass){document.getElementById('regError').textContent='Surnom + mot de passe requis';return}
-  const r = await bridgePost('/auth/register', {nickname:nick, password:pass});
-  if(r.error){document.getElementById('regError').textContent=r.error;return}
-  state.token = r.token;
-  state.nickname = r.nickname;
+async function register(){
+  const n=document.getElementById('inRegNick').value.trim(),p=document.getElementById('inRegPass').value.trim();
+  if(!n||!p){document.getElementById('errReg').textContent='Champs requis';return}
+  document.getElementById('errReg').textContent='⏳ Création...';
+  const r=await bp('/auth/register',{nickname:n,password:p});
+  if(r.error){document.getElementById('errReg').textContent=r.error;return}
+  S.token=r.token;S.nick=r.nickname;
   afterLogin();
 }
 
 function afterLogin(){
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.add('visible');
-  document.getElementById('userBadge').textContent = `👤 ${state.nickname}`;
-  document.getElementById('panelNickname').textContent = state.nickname;
-  
-  // Load config from localStorage
-  const saved = JSON.parse(localStorage.getItem('vzlom_v2_config') || '{}');
-  if(saved.keys && saved.keys.length) state.keys = saved.keys;
-  if(saved.model) state.model = saved.model;
-  if(saved.fallbacks) state.fallbacks = saved.fallbacks;
-  if(saved.autoMode) state.autoMode = saved.autoMode;
-  document.getElementById('apiKey').value = state.keys[0] || '';
-  document.getElementById('model').value = state.model;
-  document.getElementById('fallbacks').value = state.fallbacks.join('\n');
-  document.getElementById('autoMode').value = state.autoMode;
-  
-  // Load remote memory
-  syncMemory();
-  addMsg(`✅ Connecté en tant que ${state.nickname}`, 'system');
-  addMsg('🤖 Hermès prêt — envoie un message ou une tâche', 'system');
-  addMsg('💡 Utilise --continue-- pour que l\'IA continue toute seule ou active le mode auto dans Config', 'system');
+  document.getElementById('sLogin').classList.add('hidden');
+  document.getElementById('sRegister').classList.add('hidden');
+  document.getElementById('app').classList.add('show');
+  document.getElementById('userBadge').textContent='👤 '+S.nick;
+  document.getElementById('pnNick').textContent=S.nick;
+  // Load config
+  const sv=JSON.parse(localStorage.getItem('v2cfg')||'{}');
+  if(sv.keys) S.keys=sv.keys;
+  if(sv.model) S.model=sv.model;
+  if(sv.falls) S.falls=sv.falls;
+  if(sv.auto) S.auto=sv.auto;
+  document.getElementById('inKey').value=S.keys[0]||'';
+  document.getElementById('inModel').value=S.model;
+  document.getElementById('inFall').value=(S.falls||[]).join('\n');
+  document.getElementById('inAuto').value=S.auto;
+  addMsg('✅ Connecté: '+S.nick,'sys');
+  addMsg('🤖 Hermès prêt. Tab Config > Auto-agent = Smart pour auto-correction','sys');
+  syncMem();
 }
 
-async function doLogout(){
-  if(state.token) await bridgePost('/logout', {});
-  state.token = null; state.nickname = null;
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.getElementById('loginNickname').value = '';
-  document.getElementById('loginPassword').value = '';
-  stopThinkingWords(); setStatus('idle');
+async function logout(){
+  if(S.token) await bp('/logout',{});
+  S.token='';S.nick='';S.history=[];
+  document.getElementById('app').classList.remove('show');
+  document.getElementById('sLogin').classList.remove('hidden');
+  document.getElementById('inNick').value='';document.getElementById('inPass').value='';
+  document.getElementById('errLogin').textContent='';
+  twStop();sdot('idle');
 }
 
-// ═══════════════════════════════════════════════════
-// MEMORY
-// ═══════════════════════════════════════════════════
-async function syncMemory(){
-  if(!state.token) return;
-  const r = await bridgePost('/memory/context', {}, true);
-  if(r.context){
-    // Also save locally
-    try{localStorage.setItem('vzlom_bridge_memory', r.context)}catch(e){}
-    document.getElementById('memCount').textContent = r.context.includes('Aucune') ? 0 : r.context.split('\n').length;
-  }
+// Memory
+async function syncMem(){
+  if(!S.token)return;
+  const r=await bp('/memory/context',{token:S.token},true);
+  if(r.context)try{localStorage.setItem('vzlom_mem',r.context)}catch(e){}
 }
 
-async function saveMemory(content, source){
-  if(!state.token) return;
-  await bridgePost('/memory', {content, source}, true);
-  document.getElementById('memCount').textContent = parseInt(document.getElementById('memCount').textContent)+1;
+async function saveMem(content,src){
+  if(!S.token)return;
+  await bp('/memory',{content,source:src});
 }
 
-async function getMemoryContext(){
-  if(!state.token) return '';
-  const r = await bridgePost('/memory/context', {}, true);
-  return r.context || '';
+async function getMem(){
+  if(!S.token)return'';
+  const r=await bp('/memory/context',{token:S.token},true);
+  return r.context||'';
 }
 
-async function clearMyMemory(){
-  // Can't clear server-side easily, just sync
-  addMsg('🗑 Mémoire locale effacée', 'system');
+// UI
+let curDiv=null,inCode=false,cBuf='',doneShow=false;
+
+function addMsg(t,c){
+  const ch=document.getElementById('chat'),d=document.createElement('div');
+  d.className='msg '+c;d.textContent=t;ch.appendChild(d);ch.scrollTop=ch.scrollHeight;return d;
+}
+function x(e){e.style.height='auto';e.style.height=e.scrollHeight+'px'}
+
+function tab(t){
+  document.querySelectorAll('.bottom-nav button').forEach(b=>b.classList.remove('on'));
+  document.getElementById('chat').style.display=t==='chat'?'flex':'none';
+  document.getElementById('panel').classList.toggle('show',t==='cfg');
+  document.querySelector('.input-bar').style.display=t==='chat'?'flex':'none';
+  document.getElementById('tbCfg').classList.toggle('on',t==='cfg');
+  document.getElementById('tbChat').classList.toggle('on',t==='chat');
 }
 
-// ═══════════════════════════════════════════════════
-// TASKS (auto-agent)
-// ═══════════════════════════════════════════════════
-async function pushTask(description){
-  if(!state.token) return;
-  const r = await bridgePost('/tasks', {task: description}, true);
-  return r.task;
-}
+// Config save
+document.getElementById('inKey').addEventListener('change',()=>{S.keys[0]=document.getElementById('inKey').value.trim();saveCfg()});
+document.getElementById('inModel').addEventListener('change',()=>{S.model=document.getElementById('inModel').value.trim();saveCfg()});
+document.getElementById('inFall').addEventListener('change',()=>{S.falls=document.getElementById('inFall').value.split('\n').map(s=>s.trim()).filter(Boolean);saveCfg()});
+document.getElementById('inAuto').addEventListener('change',()=>{S.auto=document.getElementById('inAuto').value;saveCfg()});
+function saveCfg(){localStorage.setItem('v2cfg',JSON.stringify({keys:S.keys,model:S.model,falls:S.falls,auto:S.auto}))}
 
-// ═══════════════════════════════════════════════════
-// UI HELPERS
-// ═══════════════════════════════════════════════════
-let currentDiv = null, inCodeBlock = false, codeBuffer = '', doneShown = false;
+// System prompt
+function sysPrompt(mem){
+  return `Tu es Hermès pour Vzlom, assistant IA de ${S.nick||'Emerick'}.
 
-function addMsg(content, type){
-  const chat = document.getElementById('chat');
-  const div = document.createElement('div');
-  div.className = 'msg ' + type;
-  div.textContent = content;
-  chat.appendChild(div);
-  chat.scrollTop = chat.scrollHeight;
-  return div;
-}
-
-function autoResize(el){
-  el.style.height = 'auto';
-  el.style.height = el.scrollHeight + 'px';
-}
-
-function switchTab(tab){
-  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('chat').style.display = tab === 'chat' ? 'flex' : 'none';
-  document.getElementById('settingsPanel').classList.toggle('show', tab === 'settings');
-  document.querySelector('.input-bar').style.display = tab === 'chat' ? 'flex' : 'none';
-  if(tab === 'chat') document.getElementById('tabChat').classList.add('active');
-  else if(tab === 'settings') document.getElementById('tabSettings').classList.add('active');
-}
-
-// ═══════════════════════════════════════════════════
-// SYSTEM PROMPT
-// ═══════════════════════════════════════════════════
-function buildSystemPrompt(memoryContext){
-  return `Tu es Hermès pour Vzlom, assistant IA de ${state.nickname || 'Emerick'}.
-
-STYLE : français, concis, technique, direct.
+STYLE : français, concis, technique, direct, va droit au but.
 
 MARQUEURS (sur leur propre ligne) :
---status-- <action courte>   — ce que tu fais (1-2 mots)  
---memory-save-- <texte>      — sauvegarder info importante  
---continue--                 — tu veux continuer (suite logique, correction, étape suivante)  
---done--                     — tu as fini (et seulement quand tu as fini)
---task-- <description>       — tu crées une sous-tâche
---fix--                      — tu corriges une erreur que tu viens de détecter
+--status-- <action> — 1-2 mots sur ce que tu fais
+--memory-save-- <texte> — sauvegarder info
+--continue-- — tu veux continuer / corriger
+--fix-- — tu corriges une erreur que tu as détectée
+--done-- — fini (SEULEMENT si tout est terminé)
 
-AUTO-CORRECTION : si tu vois une erreur dans ta réponse ou dans le résultat d'une commande, utilise --fix-- puis corrige immédiatement. Ne pas attendre l'utilisateur. Tu peux enchaîner --continue-- plusieurs fois si nécessaire.
+AUTO-CORRECTION : si tu vois une erreur dans ta réponse ou bash output, utilise --fix-- puis corrige immédiatement sans attendre. Tu peux enchaîner plusieurs --continue--.
 
-TÂCHES : utilise --task-- pour décomposer un gros problème en étapes. Chaque étape devient un message suivant.
+RÈGLE : tu fais TOUT. Bash, fichiers, tout. Tu ne t'arrêtes pas tant que c'est pas fini.
 
-RÈGLE STRICTE : tu fais TOUT le travail. Si tu as besoin de bash, utilise --bash-- <commande>. Si tu as besoin de fichier, utilise --bash-- pour créer/modifier. Tu ne t'arrêtes pas tant que la tâche n'est pas terminée.
-
-MÉMOIRE RÉCENTE :
-${memoryContext || 'Aucune mémoire.'}
-
-Bridge: ${BRIDGE}`;
+MÉMOIRE :
+${mem||'Aucune.'}`;
 }
 
-// ═══════════════════════════════════════════════════
-// SEND
-// ═══════════════════════════════════════════════════
-async function send(fromAuto=false){
-  if(state.isProcessing && !fromAuto) return;
-  const input = document.getElementById('input');
-  const text = fromAuto ? ('[auto] ' + (typeof fromAuto === 'string' ? fromAuto : 'Continue et corrige si nécessaire.')) : input.value.trim();
-  if(!text) return;
+// Main send + auto-loop
+async function send(fromAuto){
+  if(S.busy&&!fromAuto)return;
+  const inp=document.getElementById('inTxt');
+  const txt=fromAuto?(typeof fromAuto==='string'?fromAuto:'Continue. Corrige si erreur.'):inp.value.trim();
+  if(!txt)return;
 
-  state.isProcessing = true;
-  document.getElementById('sendBtn').disabled = true;
-  state.autoIterations = 0;
+  S.busy=true;document.getElementById('btnSend').disabled=true;S.iters=0;
+  if(!fromAuto){addMsg(txt,'user');saveMem('[User] '+txt,'user')}
+  inp.value='';x(inp);
 
-  if(!fromAuto) addMsg(text, 'user');
-  input.value = ''; autoResize(input);
-  if(!fromAuto) saveMemory('[User] ' + text, 'user');
-
-  // Start thinking animation
-  startThinkingWords();
-  setStatus('thinking');
-
-  // Get memory context from bridge
-  const memContext = await getMemoryContext();
-
-  // Launch auto-loop
-  await agentLoop(text, memContext, fromAuto);
-
-  stopThinkingWords();
-  setStatus('done');
-  state.isProcessing = false;
-  document.getElementById('sendBtn').disabled = false;
+  twStart();sdot('think');
+  const mem=await getMem();
+  await loop(txt,mem,fromAuto);
+  twStop();sdot('done');
+  S.busy=false;document.getElementById('btnSend').disabled=false;
 }
 
-async function agentLoop(userText, memContext, isAuto){
-  let messages = [
-    {role:'system', content: buildSystemPrompt(memContext)}
-  ];
-  for(const msg of state.history) messages.push(msg);
-  messages.push({role:'user', content: userText});
+async function loop(txt,mem,isAuto){
+  let msgs=[{role:'system',content:sysPrompt(mem)}];
+  for(const m of S.history)msgs.push(m);
+  msgs.push({role:'user',content:txt});
 
-  let attempts = 0;
-  let maxAttempts = state.keys.length + state.fallbacks.length;
-  let lastError = '';
+  let att=0,maxAtt=S.keys.length+(S.falls?.length||0),lastErr='';
 
-  while(attempts <= maxAttempts){
-    const key = state.keys[state.currentKeyIdx % state.keys.length];
-    const model = attempts < 1 ? state.model : (state.fallbacks[attempts - 1] || state.model);
+  while(att<=maxAtt){
+    const key=S.keys[S.ki%S.keys.length];
+    const model=att<1?S.model:(S.falls?.[att-1]||S.model);
+    curDiv=null;inCode=false;cBuf='';doneShow=false;
 
     try{
-      if(attempts > 0) setStatus('error');
-      else setStatus('thinking');
-
-      currentDiv = null; inCodeBlock = false; codeBuffer = ''; doneShown = false;
-
-      const res = await fetch(API_URL, {
+      const res=await fetch(API,{
         method:'POST',
         headers:{
-          'Authorization':'Bearer '+key,
-          'Content-Type':'application/json',
-          'HTTP-Referer':'https://github.com/eemmee602/vzlom-algorithmic',
-          'X-Title':'Vzlom Mobile v2'
+          'Authorization':'Bearer '+key,'Content-Type':'application/json',
+          'HTTP-Referer':'https://github.com/eemmee602/vzlom-algorithmic','X-Title':'Vzlom Mobile'
         },
-        body: JSON.stringify({model, messages, stream:true, max_tokens:8192})
+        body:JSON.stringify({model,messages:msgs,stream:true,max_tokens:8192})
       });
+      if(!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).substring(0,100)}`);
 
-      if(!res.ok){
-        const err = await res.text();
-        throw new Error(`HTTP ${res.status}: ${err.substring(0,100)}`);
-      }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let full = '';
-
+      const rdr=res.body.getReader(),dec=new TextDecoder();
+      let full='';
       while(true){
-        const {done, value} = await reader.read();
-        if(done) break;
-        const chunk = decoder.decode(value, {stream:true});
-        for(const line of chunk.split('\n')){
-          if(!line.startsWith('data: ')) continue;
-          const d = line.substring(6);
-          if(d === '[DONE]') break;
+        const {done,value}=await rdr.read();
+        if(done)break;
+        const chunk=dec.decode(value,{stream:true});
+        for(const ln of chunk.split('\n')){
+          if(!ln.startsWith('data: '))continue;
+          const d=ln.substring(6);
+          if(d==='[DONE]')break;
           try{
-            const json = JSON.parse(d);
-            const delta = json.choices?.[0]?.delta?.content;
-            if(delta){
-              full += delta;
-              // Parse markers live
-              parseChunk(delta, full);
-            }
+            const j=JSON.parse(d),delta=j.choices?.[0]?.delta?.content;
+            if(delta){full+=delta;prs(delta,full)}
           }catch(e){}
         }
       }
+      if(inCode&&cBuf.trim()){addMsg(cBuf,'code');full+='\n```\n'+cBuf+'\n```'}
+      S.history.push({role:'assistant',content:full});
 
-      if(inCodeBlock && codeBuffer.trim()){
-        addMsg(codeBuffer, 'code');
-        full += '\n```\n' + codeBuffer + '\n```';
+      const si=full.indexOf('--memory-save--');
+      if(si>=0){const sv=full.substring(si+16).split('--')[0].trim();if(sv)saveMem('[AI] '+sv,'ai')}
+
+      if(!doneShow)addMsg('✅ Terminé','done');
+      sdot('done');
+
+      // Auto-loop logic
+      const cont=shouldCont(full);
+      if(cont&&S.iters<S.maxIters){
+        S.iters++;
+        addMsg(`🔄 Auto #${S.iters} — ${cont.why}`,'auto');
+        msgs.push({role:'assistant',content:full});
+        msgs.push({role:'user',content:cont.msg});
+        att=0;continue;
       }
-
-      state.history.push({role:'assistant', content: full});
-      
-      // Memory save
-      const si = full.indexOf('--memory-save--');
-      if(si >= 0){
-        const saved = full.substring(si+16).split('--')[0].trim();
-        if(saved) saveMemory('[AI] ' + saved, 'ai');
-      }
-
-      // Status done
-      if(!doneShown) addMsg('✅ Terminé', 'done');
-      setStatus('done');
-
-      // ── AUTO AGENT LOOP ──
-      const shouldContinue = shouldAutoContinue(full);
-      if(shouldContinue && state.autoIterations < state.maxAutoIterations){
-        state.autoIterations++;
-        addMsg(`🔄 Auto-iteration ${state.autoIterations}/${state.maxAutoIterations}`, 'auto');
-        
-        let nextMsg = `Continue. ${shouldContinue.why}.`;
-        if(state.autoMode === 'smart' && shouldContinue.type === 'fix'){
-          nextMsg = `Tu viens de faire une erreur ou d'oublier quelque chose. Corrige-la maintenant: ${shouldContinue.why}`;
-        }
-        
-        messages.push({role:'assistant', content: full});
-        messages.push({role:'user', content: nextMsg});
-        userText = nextMsg;
-        attempts = 0;
-        continue; // loop without incrementing
-      }
-
-      return; // done
+      return;
     }catch(e){
-      lastError = e.message;
-      setStatus('error');
-      state.currentKeyIdx = (state.currentKeyIdx + 1) % state.keys.length;
-      attempts++;
+      lastErr=e.message;S.ki=(S.ki+1)%S.keys.length;att++;
     }
   }
-
-  addMsg(`❌ Échec: ${lastError}`, 'status');
-  setStatus('error');
+  addMsg('❌ Échec: '+lastErr,'status');sdot('err');
 }
 
-function shouldAutoContinue(response){
-  if(state.autoMode === 'off') return null;
-  
-  const r = response.toLowerCase();
-  
-  // --fix-- detected (self-correction)
-  if(r.includes('--fix--')) return {type:'fix', why: 'auto-correction détectée'};
-  
-  // --continue-- detected
-  if(r.includes('--continue--')) return {type:'continue', why: 'continuation demandée'};
-  
-  // --task-- detected - the AI created a sub-task
-  if(r.includes('--task--')) return {type:'task', why: 'sous-tâche créée'};
-  
-  // Error detection keywords
-  const errors = ['erreur','oublie','raté','fail','incorrect','faux','bug','manque'];
-  if(state.autoMode === 'full' || state.autoMode === 'smart'){
-    for(const e of errors){
-      if(r.includes('--status--') && r.includes(e)){
-        return {type:'fix', why: `erreur "${e}" détectée`};
-      }
-    }
-  }
-  
-  // Full auto: always continue once if the response has --status-- but no --done--
-  if(state.autoMode === 'full' && r.includes('--status--') && !r.includes('--done--')){
-    return {type:'continue', why: 'tâche en cours non terminée'};
-  }
-  
+function shouldCont(r){
+  if(S.auto==='off')return null;
+  const l=r.toLowerCase();
+  if(l.includes('--fix--'))return {why:'auto-correction',msg:'Tu as signalé une erreur. Corrige-la maintenant.'};
+  if(l.includes('--continue--'))return {why:'continuation',msg:'Continue. Termine ce que tu faisais.'};
+  if(l.includes('--task--'))return {why:'sous-tâche',msg:'Exécute la sous-tâche que tu as créée.'};
+  if(S.auto==='full'&&l.includes('--status--')&&!l.includes('--done--'))return {why:'tâche en cours',msg:'Continue. Tu n\'as pas encore terminé.'};
   return null;
 }
 
-// ═══════════════════════════════════════════════════
-// STREAM PARSER
-// ═══════════════════════════════════════════════════
-function parseChunk(chunk, fullText){
-  if(chunk.includes('--status--')||chunk.includes('--bash--')||chunk.includes('```')||chunk.includes('--done--')||chunk.includes('--continue--')){
-    parseMarkers(chunk, fullText);
-  } else {
-    appendToAssistant(chunk);
+// Parser
+function prs(chunk,full){
+  if(chunk.includes('--status--')||chunk.includes('--bash--')||chunk.includes('```')||chunk.includes('--done--'))
+    pMark(chunk,full);
+  else app(chunk);
+}
+
+function pMark(text,full){
+  const re=/(--status--)\s*([^-]+)--|--bash--\s+([^\n]+)|```(\w*)\n|```|--done--/g;
+  let li=0,m;
+  while((m=re.exec(text))){
+    if(m.index>li)app(text.substring(li,m.index));
+    li=m.index+m[0].length;
+    if(m[0].startsWith('--status--')){const s=m[2]?m[2].trim():'';addMsg('⚡ '+s,'status')}
+    else if(m[0].startsWith('--bash--')){
+      const c=m[3]?m[3].trim():'';addMsg('┌─ bash ─┐\n$ '+c,'bash');
+      bp('/bash?token='+S.token,{command:c}).then(r=>{if(r&&r.output)addMsg(r.output.substring(0,400),'bash')});
+    }
+    else if(m[0].startsWith('```')&&!inCode){inCode=true;cBuf=''}
+    else if(m[0]==='```'&&inCode){inCode=false;if(cBuf.trim()){addMsg(cBuf,'code');S.history.push({role:'assistant',content:'\n```lua\n'+cBuf+'\n```'})}cBuf=''}
+    else if(m[0]==='--done--'){if(!doneShow){doneShow=true;addMsg('✅ Terminé','done')}}
   }
+  if(li<text.length)app(text.substring(li));
 }
 
-function parseMarkers(text, fullText){
-  const regex = /--status--\s*([^-]+)--|--bash--\s*([^\n]+)|```(\w*)\n|```|--done--|--continue--|--fix--|--task--\s*([^\n]+)/g;
-  let lastIdx = 0, match;
-
-  while((match = regex.exec(text)) !== null){
-    if(match.index > lastIdx){
-      appendToAssistant(text.substring(lastIdx, match.index));
-    }
-    lastIdx = match.index + match[0].length;
-
-    if(match[0].startsWith('--status--')){
-      const status = match[1] ? match[1].trim() : '...';
-      addMsg(`⚡ ${status}`, 'status');
-    }
-    else if(match[0].startsWith('--bash--')){
-      const cmd = match[2] ? match[2].trim() : '';
-      addMsg(`┌─ bash ─┐\n$ ${cmd}`, 'bash');
-      bridgePost('/bash?token='+state.token, {command: cmd}).then(r => {
-        if(r.output) addMsg(r.output.substring(0,500)+'...', 'bash');
-      });
-    }
-    else if(match[0].startsWith('```') && !inCodeBlock){
-      inCodeBlock = true; codeBuffer = '';
-    }
-    else if(match[0] === '```' && inCodeBlock){
-      inCodeBlock = false;
-      if(codeBuffer.trim()){
-        addMsg(codeBuffer, 'code');
-        state.history.push({role:'assistant',content:'\n```lua\n'+codeBuffer+'\n```'});
-      }
-      codeBuffer = '';
-    }
-    else if(match[0] === '--done--'){
-      if(!doneShown){ doneShown = true; addMsg('✅ Terminé', 'done'); }
-    }
-    else if(match[0].startsWith('--continue--') || match[0].startsWith('--fix--')){
-      addMsg('🔄 Auto-continuation...', 'auto');
-    }
-    else if(match[0].startsWith('--task--')){
-      const task = match[4] ? match[4].trim() : 'Tâche...';
-      addMsg(`📋 Sous-tâche: ${task}`, 'auto');
-      if(state.token) pushTask(task);
-    }
-  }
-  if(lastIdx < text.length){
-    appendToAssistant(text.substring(lastIdx));
-  }
+function app(t){
+  if(!t)return;
+  if(inCode){cBuf+=t;return}
+  if(!curDiv)curDiv=addMsg('','assistant');
+  curDiv.textContent+=t;document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
 }
 
-function appendToAssistant(text){
-  if(!text) return;
-  if(inCodeBlock){ codeBuffer += text; return; }
-  if(!currentDiv) currentDiv = addMsg('', 'assistant');
-  currentDiv.textContent += text;
-  document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
-}
-
-// ═══════════════════════════════════════════════════
-// SETTINGS SAVE
-// ═══════════════════════════════════════════════════
-function saveSettings(){
-  const key = document.getElementById('apiKey').value.trim();
-  if(key && !state.keys.includes(key)) state.keys.push(key);
-  else if(key && state.keys.length > 0) state.keys[0] = key;
-  state.model = document.getElementById('model').value.trim() || state.model;
-  state.fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  state.autoMode = document.getElementById('autoMode').value;
-  
-  localStorage.setItem('vzlom_v2_config', JSON.stringify({
-    keys: state.keys, model: state.model,
-    fallbacks: state.fallbacks, autoMode: state.autoMode
-  }));
-  addMsg('✅ Config sauvegardée', 'system');
-}
-
-// Input key handler
-document.getElementById('input').addEventListener('keydown', function(e){
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); }
+document.getElementById('inTxt').addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
 });
-
-// Settings panel auto-saves on tab switch
-document.getElementById('apiKey').addEventListener('change', saveSettings);
-document.getElementById('model').addEventListener('change', saveSettings);
-document.getElementById('fallbacks').addEventListener('change', saveSettings);
-document.getElementById('autoMode').addEventListener('change', saveSettings);
-
-// Initial state
-setStatus('idle');
 </script>
 </body>
 </html>
