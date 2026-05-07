@@ -108,7 +108,7 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
     <label>🔑 Clé API</label>
     <input type="password" id="inKey" placeholder="sk-or-v1-...">
     <label>🤖 Modèle</label>
-    <input type="text" id="inModel" value="openai/gpt-4o">
+    <input type="text" id="inModel" value="google/gemini-2.0-flash-lite">
     <label>🔄 Fallbacks</label>
     <textarea id="inFall" rows="2">anthropic/claude-sonnet-4-20250514</textarea>
     <label>⚙ Auto-agent</label>
@@ -322,7 +322,7 @@ async function loop(txt,mem,isAuto){
           'Authorization':'Bearer '+key,'Content-Type':'application/json',
           'HTTP-Referer':'https://github.com/eemmee602/vzlom-algorithmic','X-Title':'Vzlom Mobile'
         },
-        body:JSON.stringify({model,messages:msgs,stream:true,max_tokens:8192})
+        body:JSON.stringify({model,messages:msgs,stream:true,max_tokens:2048})
       });
       if(!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).substring(0,100)}`);
 
