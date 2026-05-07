@@ -71,7 +71,7 @@ public class ApiClient : IDisposable
             model,
             messages = history,
             stream = true,
-            max_tokens = 8192
+            max_tokens = 2048
         };
 
         var json = JsonSerializer.Serialize(payload);
