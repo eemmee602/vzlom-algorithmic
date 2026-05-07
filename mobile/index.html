@@ -40,13 +40,28 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
 .settings-panel input,.settings-panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:Consolas,monospace;outline:none}
 .settings-panel input:focus,.settings-panel textarea:focus{border-color:#00d4ff}
 .settings-panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
+
+.status-dot-thinking{color:#00d4ff;animation:pulse 0.8s ease-in-out infinite}
+.status-dot-done{color:#00ff88}
+.status-dot-error{color:#ff4444}
+@keyframes pulse{0%{opacity:0.3;transform:scale(0.8)}50%{opacity:1;transform:scale(1.2)}100%{opacity:0.3;transform:scale(0.8)}}
+@keyframes scanline{0%{background-position:0% 0%}100%{background-position:0% 100%}}
+.thinking-card{background:linear-gradient(180deg,#0d1a2e 0%,#16213e 100%);border-left:2px solid #00d4ff;position:relative;overflow:hidden}
+.thinking-card::after{content:'';position:absolute;top:0;left:0;width:100%;height:2px;background:linear-gradient(90deg,transparent,#00d4ff,transparent);animation:scan 1.5s linear infinite}
+@keyframes scan{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+.thinking-dots{display:inline-flex;gap:4px;margin-left:4px}
+.thinking-dots span{width:5px;height:5px;background:#00d4ff;border-radius:50%;animation:bounce 1.2s ease-in-out infinite}
+.thinking-dots span:nth-child(2){animation-delay:0.2s}
+.thinking-dots span:nth-child(3){animation-delay:0.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
 </style>
 </head>
 <body>
 <div class="header">
   <span style="font-size:18px">🖥️</span>
   <h1>VZLOM Mobile</h1>
-  <span class="status" id="status">● Prêt</span>
+  <span class="status" id="status"><span id="statusDot">●</span> <span id="statusText">Prêt</span></span>
 </div>
 
 <div class="chat" id="chat"></div>
@@ -188,7 +203,8 @@ let inCodeBlock = false;        // on est dans un ```...```
 let codeBuffer = '';            // accumulation du code
 let statusDiv = null;           // dernière carte statut
 let bashDiv = null;             // dernière carte bash
-let doneShown = false;let thinkingTime = 0;          // --done-- déjà affiché ?
+let doneShown = false;
+let thinkingTime = 0;          // --done-- déjà affiché ?
 
 function parseChunk(chunk, fullText) {
   let remaining = chunk;
@@ -312,7 +328,12 @@ function removeTyping() {
 }
 
 function setStatus(s) {
-  document.getElementById('status').textContent = '● ' + s;
+  document.getElementById('statusText').textContent = s;
+  const dot = document.getElementById('statusDot');
+  if (s.includes('✅') || s.includes('Terminé')) dot.className = 'status-dot-done';
+  else if (s.includes('❌') || s.includes('⚠️')) dot.className = 'status-dot-error';
+  else if (s.includes('🤔') || s.includes('Réflexion')) dot.className = 'status-dot-thinking';
+  else dot.className = '';
 }
 
 function autoResize(el) {
@@ -365,6 +386,9 @@ async function send() {
       else setStatus(`🤖 ${model}`);
 
       removeTyping();
+      // Remove thinking card when streaming starts
+      const tc = document.getElementById('thinkingCard');
+      if (tc) { tc.style.opacity = '0.3'; tc.style.fontSize = '10px'; tc.innerHTML = '✔ ' + (tc.textContent || ''); }
       currentDiv = addMsg('', 'assistant');
       let full = '';
 
