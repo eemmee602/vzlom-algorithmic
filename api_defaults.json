@@ -2,11 +2,18 @@
   "api_keys": [
     "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"
   ],
-  "default_model": "openai/gpt-4o",
+  "default_model": "google/gemini-2.0-flash-lite",
   "fallback_models": [
-    "anthropic/claude-sonnet-4-20250514",
-    "google/gemini-2.5-pro",
     "deepseek/deepseek-chat",
-    "mistralai/mistral-large-2411"
-  ]
+    "mistralai/mistral-small-2501",
+    "meta-llama/llama-3.2-3b-instruct"
+  ],
+  "bridge_url": "http://142.248.80.40:3456",
+  "bridge_account": {
+    "nickname": "Emerick",
+    "password": "2208"
+  },
+  "auto_agent": "smart",
+  "max_tokens": 2048,
+  "version": "2.0.0"
 }
