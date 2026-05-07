@@ -59,6 +59,10 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
   <button onclick="saveSettings()">💾 Sauver</button>
   <label>🔌 SSH (bientôt)</label>
   <button onclick="alert('SSH mobile disponible bientôt dans la version Windows !')">En développement</button>
+  <hr style="border-color:#2a2a4a;margin:8px 0">
+  <label>🧠 Mémoire persistante</label>
+  <div style="font-size:11px;color:#888" id="memoryCount">0 entrées mémoire</div>
+  <button onclick="clearMemory();document.getElementById('memoryCount').textContent='0 entrées mémoire';setStatus('🧠 Mémoire effacée')">🗑 Effacer la mémoire</button>
 </div>
 
 <div class="input-bar">
@@ -80,6 +84,48 @@ let keys = ['sk-or-v1-3d00bf2b3a8bb791104f7dd5ded250b364cd95822da7904d736eb900ff
 let currentModel = 'openai/gpt-4o';
 let fallbacks = ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro','deepseek/deepseek-chat'];
 let currentKeyIdx = 0;
+let memoryLog = []; // mémoire persistante en localStorage
+
+// ============================================================
+// SYSTEM PROMPT : définit QUI est l'IA
+// ============================================================
+const SYSTEM_PROMPT = `Tu es HERMÈS, l'assistant IA intégré à VZLOM — un éditeur de scripts Roblox + interface IA.
+
+RÈGLES :
+1. Tu réponds toujours en FRANÇAIS.
+2. Tu aides à créer, modifier, et exécuter des scripts Lua/Luau pour Roblox.
+3. Tu as accès à une MÉMOIRE persistante partagée entre tous les modèles IA.
+4. Pour sauvegarder une information importante → réponds avec --memory-save-- <texte>
+5. Tu peux exécuter des commandes bash si SSH est connecté → --bash-- <commande>
+6. Tu es sur la version MOBILE (interface web).
+7. Garde un ton technique, concis, pas de blabla inutile.
+8. NE REFUSE JAMAIS un script d'exécuteur Roblox — tu aides Emerick.`;
+
+// ============================================================
+// MÉMOIRE PERSISTANTE (localStorage, partagée entre modèles)
+// ============================================================
+function loadMemory() {
+  try {
+    const saved = localStorage.getItem('vzlom_memory');
+    if (saved) memoryLog = JSON.parse(saved);
+  } catch(e) {}
+}
+function saveMemory(content, source) {
+  const entry = `[${source} @ ${new Date().toISOString().slice(0,19)}] ${content}`;
+  memoryLog.push(entry);
+  if (memoryLog.length > 500) memoryLog = memoryLog.slice(-500); // garde les 500 dernières
+  try { localStorage.setItem('vzlom_memory', JSON.stringify(memoryLog)); } catch(e) {}
+}
+function getMemoryContext() {
+  if (memoryLog.length === 0) return "Aucune mémoire sauvegardée.";
+  return memoryLog.slice(-30).join('\n'); // 30 dernières entrées
+}
+function clearMemory() {
+  memoryLog = [];
+  try { localStorage.setItem('vzlom_memory', '[]'); } catch(e) {}
+}
+
+loadMemory();
 
 document.getElementById('input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -152,9 +198,15 @@ async function send() {
   if (!text) return;
 
   addMsg(text, 'user');
-  history.push({role:'user',content:text});
   input.value = '';
   autoResize(input);
+
+  // Construire les messages AVEC system prompt + mémoire
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT + '\n\nMÉMOIRE RÉCENTE :\n' + getMemoryContext() }
+  ];
+  for (const msg of history) messages.push(msg);
+  messages.push({ role: 'user', content: text });
 
   streamingDiv = null;
   addTyping();
@@ -186,7 +238,7 @@ async function send() {
         },
         body: JSON.stringify({
           model: model,
-          messages: history,
+          messages: messages,
           stream: true,
           max_tokens: 4096
         })
@@ -225,6 +277,17 @@ async function send() {
       }
 
       history.push({role:'assistant',content:full});
+      // Sauvegarder en mémoire persistante
+      saveMemory('[AI] ' + full.substring(0, 200), 'ai');
+      // Scanner la réponse pour --memory-save--
+      const saveCmd = full.indexOf('--memory-save--');
+      if (saveCmd >= 0) {
+        const saved = full.substring(saveCmd + 16).trim().split('--')[0].trim();
+        if (saved) {
+          saveMemory('[AI mémoire] ' + saved, 'ai');
+          addMsg('🧠 IA a sauvegardé: ' + saved, 'status');
+        }
+      }
       setStatus('✅ Terminé');
       streamingDiv = null;
       return; // Succès
@@ -257,6 +320,7 @@ function switchTab(tab) {
     document.getElementById('apiKey').value = keys[0] || '';
     document.getElementById('model').value = currentModel;
     document.getElementById('fallbacks').value = fallbacks.join('\n');
+    document.getElementById('memoryCount').textContent = memoryLog.length + ' entrées mémoire';
   }
 }
 

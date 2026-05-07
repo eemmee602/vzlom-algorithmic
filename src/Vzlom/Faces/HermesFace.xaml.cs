@@ -13,10 +13,12 @@ public partial class HermesFace : UserControl
     private readonly SshClient _ssh = new();
     private readonly PermissionManager _perms;
     private readonly ScriptManager _scriptMgr;
+    private readonly MemoryManager _memory = new();
     private readonly List<object> _history = new();
     private BitmapSource? _pendingImage;
     private Border? _streamingBorder;
     private TextBlock? _streamingBlock;
+    private string _lastFullResponse = "";
 
     public HermesFace(PermissionManager perms, ScriptManager scriptMgr)
     {
@@ -33,7 +35,11 @@ public partial class HermesFace : UserControl
         _ssh.OnCommandResult += OnCommandResult;
         _ssh.OnStatus += OnStatusChange;
 
-        AddSystemMessage("🤖 Hermès prêt. Envoie un message ou configure SSH/API dans ⚙.");
+        // Memory events
+        _memory.OnStatus += OnStatusChange;
+
+        AddSystemMessage("🤖 Hermès prêt. Mémoire partagée automatique activée.");
+        AddSystemMessage($"🧠 Fichier mémoire: {Path.GetFileName(_memory.GetFilePath())} ({_memory.FileSize} bytes)");
         LoadSavedKeys();
     }
 
@@ -111,6 +117,7 @@ public partial class HermesFace : UserControl
     // ─── Streaming ───
     private void OnStreamChunk(string chunk)
     {
+        _lastFullResponse += chunk;
         Dispatcher.Invoke(() =>
         {
             if (_streamingBlock == null)
@@ -157,25 +164,49 @@ public partial class HermesFace : UserControl
         });
     }
 
-    // ─── Envoi message ───
+    // ─── Envoi message avec mémoire injectée ───
     private async void OnSend(object sender, RoutedEventArgs e)
     {
         var text = InputBox.Text.Trim();
         if (string.IsNullOrEmpty(text) && _pendingImage == null) return;
 
         AddMessage(text, MessageRole.User);
-        _history.Add(new { role = "user", content = text });
 
+        // Construire l'historique avec la mémoire partagée en system prompt
+        var fullHistory = new List<object>
+        {
+            new { role = "system", content = $@"Tu es Hermès, l'assistant IA intégré à Vzlom Algorithmic.
+Tu as accès à une mémoire persistante partagée entre tous les modèles.
+Commande mémoire : réponds avec --memory-save-- <texte> pour sauvegarder une information importante.
+
+MÉMOIRE ACTUELLE :
+{_memory.GetMemoryContext()}" }
+        };
+
+        foreach (var msg in _history)
+            fullHistory.Add(msg);
+
+        fullHistory.Add(new { role = "user", content = text });
+
+        _lastFullResponse = "";
         _streamingBlock = null;
         _streamingBorder = null;
 
-        // Extraire code potentiel
-        var extracted = await _scriptMgr.ExtractCode(text);
-        if (extracted != null)
-            AddSystemMessage($"📄 Script détecté ({extracted.Length} chars)");
+        // Sauvegarder le message utilisateur en mémoire
+        _memory.SaveMemory($"[User] {text}", "user");
 
-        // Envoyer à l'API avec SSH context
-        await _api.SendMessageAsync(text, _history, _ssh.IsConnected ? _ssh : null);
+        // Envoyer à l'API avec SSH context et mémoire
+        await _api.SendMessageAsync(text, fullHistory, _ssh.IsConnected ? _ssh : null);
+
+        // Après la réponse, scanner pour les commandes mémoire
+        if (!string.IsNullOrEmpty(_lastFullResponse))
+        {
+            var saved = _memory.ProcessAiResponse(_lastFullResponse);
+            if (saved != null)
+                AddSystemMessage($"🧠 IA a sauvegardé en mémoire: {saved[..Math.Min(saved.Length, 80)]}...");
+
+            _history.Add(new { role = "assistant", content = _lastFullResponse });
+        }
 
         InputBox.Text = "";
     }
@@ -256,6 +287,14 @@ public partial class HermesFace : UserControl
     private void OnSettings(object sender, RoutedEventArgs e)
     {
         var dialog = new Controls.SettingsDialog(_api, _ssh);
+        dialog.Owner = Window.GetWindow(this);
+        dialog.ShowDialog();
+    }
+
+    // ─── Memory button ───
+    private void OnMemory(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Controls.MemoryDialog(_memory);
         dialog.Owner = Window.GetWindow(this);
         dialog.ShowDialog();
     }

@@ -1,0 +1,47 @@
+<Window x:Class="Vzlom.Controls.MemoryDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="🧠 Mémoire persistante"
+        Width="550" Height="450"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource BgDarkBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}"
+        FontFamily="Consolas"
+        WindowStyle="ToolWindow"
+        ResizeMode="NoResize"
+        Topmost="True">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="🧠 Mémoire partagée entre TOUS les modèles IA" 
+                   Foreground="{StaticResource AccentBrush}" FontSize="13" Margin="0,0,0,8"/>
+
+        <Border Grid.Row="1" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="4">
+            <TextBox x:Name="MemoryContent" 
+                     IsReadOnly="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     Background="{StaticResource BgDarkBrush}"
+                     Foreground="{StaticResource TextPrimaryBrush}"
+                     FontSize="12"
+                     Padding="8"/>
+        </Border>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <TextBlock x:Name="FileInfo" VerticalAlignment="Center" 
+                       Foreground="{StaticResource TextSecondaryBrush}" FontSize="11" Margin="0,0,12,0"/>
+            <Button Content="📂 Ouvrir fichier" Click="OnOpenFile" 
+                    Height="28" Padding="10,0" Margin="0,0,6,0"/>
+            <Button Content="🗑 Effacer mémoire" Click="OnClear" 
+                    Height="28" Padding="10,0" Margin="0,0,6,0"
+                    Background="{StaticResource AccentRedBrush}"/>
+            <Button Content="✅ Fermer" Click="OnClose" 
+                    Height="28" Padding="10,0"
+                    Background="{StaticResource AccentGreenBrush}" Foreground="#000"/>
+        </StackPanel>
+    </Grid>
+</Window>

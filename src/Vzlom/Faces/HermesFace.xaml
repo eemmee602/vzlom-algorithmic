@@ -36,7 +36,9 @@
                         Click="OnToggleSsh" FontSize="10" Height="20" Padding="6,0" Margin="0,0,4,0"/>
                 <Button x:Name="BtnBypass" Grid.Column="5" Content="⚡ BYPASS" 
                         Click="OnToggleBypass" FontSize="10" Height="20" Padding="6,0" Margin="0,0,4,0"/>
-                <Button x:Name="BtnSettings" Grid.Column="6" Content="⚙" 
+                    <Button x:Name="BtnMemory" Grid.Column="6" Content="🧠" 
+                        Click="OnMemory" FontSize="12" Height="20" Width="24" Padding="0" Margin="0,0,4,0"/>
+                    <Button x:Name="BtnSettings" Grid.Column="7" Content="⚙" 
                         Click="OnSettings" FontSize="14" Height="20" Width="24" Padding="0"/>
             </Grid>
         </Border>
