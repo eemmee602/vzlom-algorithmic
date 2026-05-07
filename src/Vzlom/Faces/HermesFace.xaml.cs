@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using Vzlom.Core;
 using Vzlom.Models;
 
@@ -11,11 +10,13 @@ namespace Vzlom.Faces;
 public partial class HermesFace : UserControl
 {
     private readonly ApiClient _api = new();
+    private readonly SshClient _ssh = new();
     private readonly PermissionManager _perms;
     private readonly ScriptManager _scriptMgr;
     private readonly List<object> _history = new();
     private BitmapSource? _pendingImage;
-    private int _msgCount = 0;
+    private Border? _streamingBorder;
+    private TextBlock? _streamingBlock;
 
     public HermesFace(PermissionManager perms, ScriptManager scriptMgr)
     {
@@ -23,19 +24,24 @@ public partial class HermesFace : UserControl
         _perms = perms;
         _scriptMgr = scriptMgr;
 
+        // API events
         _api.OnStreamChunk += OnStreamChunk;
         _api.OnBashCommand += OnBashCommand;
         _api.OnStatusChange += OnStatusChange;
 
-        AddSystemMessage("🤖 Hermès prêt. Envoie ton message.");
+        // SSH events
+        _ssh.OnCommandResult += OnCommandResult;
+        _ssh.OnStatus += OnStatusChange;
+
+        AddSystemMessage("🤖 Hermès prêt. Envoie un message ou configure SSH/API dans ⚙.");
+        LoadSavedKeys();
     }
 
-    private void AddSystemMessage(string text)
-    {
-        AddMessage(text, MessageRole.System);
-    }
+    // ─── Messages ───
 
-    private void AddMessage(string text, MessageRole role)
+    private void AddSystemMessage(string text) => AddMessage(text, MessageRole.System);
+
+    private void AddMessage(string text, MessageRole role, bool isBashOutput = false)
     {
         Dispatcher.Invoke(() =>
         {
@@ -47,48 +53,53 @@ public partial class HermesFace : UserControl
                 Background = role switch
                 {
                     MessageRole.User => new SolidColorBrush(Color.FromRgb(15, 52, 96)),
-                    MessageRole.Bash => new SolidColorBrush(Color.FromRgb(30, 30, 20)),
+                    MessageRole.Bash => new SolidColorBrush(Color.FromRgb(25, 22, 15)),
                     MessageRole.Status => new SolidColorBrush(Color.FromRgb(20, 30, 20)),
-                    MessageRole.System => new SolidColorBrush(Color.FromRgb(26, 26, 46)),
-                    _ => new SolidColorBrush(Color.FromRgb(22, 22, 36)),
+                    _ => new SolidColorBrush(Color.FromRgb(26, 26, 46)),
                 }
             };
 
             var stack = new StackPanel();
 
-            // Label de rôle
-            if (role == MessageRole.Bash)
+            // En-tête bash
+            if (role == MessageRole.Bash && !isBashOutput)
             {
-                var label = new TextBlock
+                stack.Children.Add(new TextBlock
                 {
-                    Text = "┌─ bash ─────────────────────────────┐",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 170, 0)),
-                    FontSize = 11,
+                    Text = "┌─ bash ───────────────────────────┐",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 185, 15)),
+                    FontSize = 10,
                     FontFamily = new FontFamily("Consolas"),
-                };
-                stack.Children.Add(label);
+                    Margin = new Thickness(0, 0, 0, 4),
+                });
             }
 
             var tb = new TextBlock
             {
                 Text = text,
-                Foreground = new SolidColorBrush(Color.FromRgb(224, 224, 224)),
+                Foreground = role switch
+                {
+                    MessageRole.Bash when isBashOutput => new SolidColorBrush(Color.FromRgb(180, 220, 180)),
+                    MessageRole.Bash => new SolidColorBrush(Color.FromRgb(255, 185, 15)),
+                    _ => new SolidColorBrush(Color.FromRgb(224, 224, 224)),
+                },
                 FontSize = 13,
                 FontFamily = new FontFamily("Consolas"),
                 TextWrapping = TextWrapping.Wrap,
             };
             stack.Children.Add(tb);
 
-            if (role == MessageRole.Bash)
+            // Pied bash
+            if (role == MessageRole.Bash && !isBashOutput)
             {
-                var label = new TextBlock
+                stack.Children.Add(new TextBlock
                 {
-                    Text = "└─────────────────────────────────────┘",
-                    Foreground = new SolidColorBrush(Color.FromRgb(255, 170, 0)),
-                    FontSize = 11,
+                    Text = "└───────────────────────────────────┘",
+                    Foreground = new SolidColorBrush(Color.FromRgb(255, 185, 15)),
+                    FontSize = 10,
                     FontFamily = new FontFamily("Consolas"),
-                };
-                stack.Children.Add(label);
+                    Margin = new Thickness(0, 4, 0, 0),
+                });
             }
 
             border.Child = stack;
@@ -97,10 +108,7 @@ public partial class HermesFace : UserControl
         });
     }
 
-    private Border? _streamingBorder;
-    private TextBlock? _streamingBlock;
-    private string _currentBuffer = "";
-
+    // ─── Streaming ───
     private void OnStreamChunk(string chunk)
     {
         Dispatcher.Invoke(() =>
@@ -124,16 +132,16 @@ public partial class HermesFace : UserControl
                 _streamingBorder.Child = _streamingBlock;
                 ChatPanel.Children.Add(_streamingBorder);
             }
-
             _streamingBlock.Text += chunk;
-            _currentBuffer += chunk;
             ChatScroll.ScrollToBottom();
         });
     }
 
-    private void OnBashCommand(string cmd)
+    private void OnBashCommand(string cmd) => AddMessage(cmd, MessageRole.Bash);
+
+    private void OnCommandResult(string output, bool isError)
     {
-        AddMessage($">{cmd}", MessageRole.Bash);
+        AddMessage(output, MessageRole.Bash, isBashOutput: true);
     }
 
     private void OnStatusChange(string status)
@@ -143,12 +151,13 @@ public partial class HermesFace : UserControl
             StatusLabel.Text = status;
             StatusIcon.Foreground = status.Contains("❌")
                 ? new SolidColorBrush(Color.FromRgb(255, 68, 68))
-                : status.Contains("✅")
+                : status.Contains("✅") || status.Contains("🔗")
                     ? new SolidColorBrush(Color.FromRgb(0, 255, 136))
                     : new SolidColorBrush(Color.FromRgb(0, 212, 255));
         });
     }
 
+    // ─── Envoi message ───
     private async void OnSend(object sender, RoutedEventArgs e)
     {
         var text = InputBox.Text.Trim();
@@ -157,17 +166,16 @@ public partial class HermesFace : UserControl
         AddMessage(text, MessageRole.User);
         _history.Add(new { role = "user", content = text });
 
-        // Si image, ajouter au message
         _streamingBlock = null;
         _streamingBorder = null;
-        _currentBuffer = "";
 
         // Extraire code potentiel
         var extracted = await _scriptMgr.ExtractCode(text);
         if (extracted != null)
-        {
-            AddMessage($"📄 Script détecté ({extracted.Length} chars)", MessageRole.Status);
-        }
+            AddSystemMessage($"📄 Script détecté ({extracted.Length} chars)");
+
+        // Envoyer à l'API avec SSH context
+        await _api.SendMessageAsync(text, _history, _ssh.IsConnected ? _ssh : null);
 
         InputBox.Text = "";
     }
@@ -181,27 +189,102 @@ public partial class HermesFace : UserControl
         }
     }
 
+    // ─── Image ───
     private void OnPasteImage(object sender, RoutedEventArgs e)
     {
         if (Clipboard.ContainsImage())
         {
             _pendingImage = Clipboard.GetImage();
-            ImageName.Text = $"Image presse-papier ({_pendingImage.PixelWidth}x{_pendingImage.PixelHeight})";
+            ImageName.Text = $"Image ({_pendingImage.PixelWidth}x{_pendingImage.PixelHeight})";
             ImagePreviewPanel.Visibility = Visibility.Visible;
         }
     }
-
     private void OnRemoveImage(object sender, RoutedEventArgs e)
     {
         _pendingImage = null;
         ImagePreviewPanel.Visibility = Visibility.Collapsed;
     }
 
+    // ─── SSH ───
+    private void OnToggleSsh(object sender, RoutedEventArgs e)
+    {
+        if (_ssh.IsConnected)
+        {
+            _ssh.Disconnect();
+            SshIndicator.Text = "";
+            BtnSsh.Background = Brushes.Transparent;
+            return;
+        }
+
+        // Charger config depuis fichier
+        var cfgPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ssh_config.json");
+        if (File.Exists(cfgPath))
+        {
+            try
+            {
+                var json = File.ReadAllText(cfgPath);
+                var cfg = Newtonsoft.Json.JsonConvert.DeserializeObject<SshConfig>(json);
+                if (cfg != null)
+                {
+                    _ssh.Configure(cfg.Host, cfg.Port, cfg.User, cfg.Password ?? cfg.KeyPath ?? "", !string.IsNullOrEmpty(cfg.KeyPath));
+                    if (_ssh.Connect())
+                    {
+                        SshIndicator.Text = $"🔗 {cfg.Host}";
+                        BtnSsh.Background = new SolidColorBrush(Color.FromRgb(0, 100, 60));
+                        AddSystemMessage($"🔗 SSH connecté → {cfg.User}@{cfg.Host}:{cfg.Port}");
+                    }
+                    return;
+                }
+            }
+            catch { }
+        }
+
+        AddSystemMessage("⚠️ Aucune config SSH trouvée. Mets tes identifiants dans ⚙ > SSH Config");
+    }
+
+    // ─── Bypass toggle ───
     private void OnToggleBypass(object sender, RoutedEventArgs e)
     {
         _perms.BypassMode = !_perms.BypassMode;
         BtnBypass.Background = _perms.BypassMode
-            ? new SolidColorBrush(Color.FromRgb(255, 100, 0))
-            : System.Windows.Media.Brushes.Transparent;
+            ? new SolidColorBrush(Color.FromRgb(200, 80, 0))
+            : Brushes.Transparent;
+        AddSystemMessage(_perms.BypassMode ? "⚡ Mode BYPASS activé" : "🔒 Mode permissions normal");
     }
+
+    // ─── Settings ───
+    private void OnSettings(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Controls.SettingsDialog(_api, _ssh);
+        dialog.Owner = Window.GetWindow(this);
+        dialog.ShowDialog();
+    }
+
+    // ─── API Keys persistées ───
+    private void LoadSavedKeys()
+    {
+        var path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "api_keys.json");
+        if (File.Exists(path))
+        {
+            try
+            {
+                var json = File.ReadAllText(path);
+                var keys = Newtonsoft.Json.JsonConvert.DeserializeObject<string[]>(json);
+                if (keys != null)
+                    foreach (var k in keys)
+                        if (!string.IsNullOrEmpty(k))
+                            _api.AddApiKey(k);
+            }
+            catch { }
+        }
+    }
+}
+
+public class SshConfig
+{
+    public string Host { get; set; } = "";
+    public int Port { get; set; } = 22;
+    public string User { get; set; } = "";
+    public string? Password { get; set; }
+    public string? KeyPath { get; set; }
 }

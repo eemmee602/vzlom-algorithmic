@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>Vzlom Mobile</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+.header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a}
+.header h1{font-size:14px;color:#00d4ff;font-weight:bold}
+.status{font-size:10px;color:#888;margin-left:auto}
+.chat{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px}
+.msg{background:#1a1a2e;border-radius:6px;padding:8px 10px;font-size:13px;line-height:1.5;max-width:95%;word-break:break-word;animation:fadeIn .2s}
+.msg.user{border-left:2px solid #00d4ff}
+.msg.assistant{border-left:2px solid #00ff88}
+.msg.bash{border-left:2px solid #ffb90f;background:#19160d;font-size:11px;white-space:pre-wrap}
+.msg.status{border-left:2px solid #888;background:#141e14;font-size:11px;text-align:center}
+.msg.code{border-left:2px solid #ff8800;background:#1a1a1a;font-size:12px;white-space:pre-wrap;font-family:'Consolas',monospace}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.typing{display:flex;gap:4px;padding:4px 0}
+.typing span{width:6px;height:6px;background:#00d4ff;border-radius:50%;animation:bounce 1.4s infinite}
+.typing span:nth-child(2){animation-delay:.2s}
+.typing span:nth-child(3){animation-delay:.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
+.input-bar{background:#16213e;padding:8px;display:flex;gap:8px;border-top:1px solid #2a2a4a;align-items:flex-end}
+.input-bar textarea{flex:1;background:#0d0d1a;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:6px;padding:10px;font-size:14px;font-family:'Consolas',monospace;resize:none;min-height:44px;max-height:120px;outline:none}
+.input-bar textarea:focus{border-color:#00d4ff}
+.input-bar button{background:#00d4ff;color:#000;border:none;border-radius:6px;padding:10px 16px;font-size:16px;font-weight:bold;cursor:pointer;white-space:nowrap}
+.input-bar button:active{opacity:.7}
+.bottom-nav{background:#16213e;display:flex;border-top:1px solid #2a2a4a}
+.bottom-nav button{flex:1;background:#0d0d1a;color:#888;border:none;padding:10px;font-size:12px;font-family:'Consolas',monospace;cursor:pointer;border-right:1px solid #2a2a4a}
+.bottom-nav button:last-child{border-right:none}
+.bottom-nav button.active{color:#00d4ff;background:#1a1a2e}
+.settings-panel{display:none;background:#0d0d1a;padding:12px;flex-direction:column;gap:8px;overflow-y:auto;max-height:60dvh}
+.settings-panel.show{display:flex}
+.settings-panel label{font-size:11px;color:#888}
+.settings-panel input,.settings-panel textarea{background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:4px;padding:8px;font-size:12px;font-family:'Consolas',monospace;outline:none}
+.settings-panel input:focus,.settings-panel textarea:focus{border-color:#00d4ff}
+.settings-panel button{background:#00d4ff;color:#000;border:none;border-radius:4px;padding:10px;font-size:13px;font-weight:bold;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="header">
+  <span style="font-size:18px">🖥️</span>
+  <h1>VZLOM Mobile</h1>
+  <span class="status" id="status">● Prêt</span>
+</div>
+
+<div class="chat" id="chat"></div>
+
+<div class="settings-panel" id="settings">
+  <label>🔑 Clé API OpenRouter</label>
+  <input type="password" id="apiKey" placeholder="sk-or-v1-..." value="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">
+  <label>🤖 Modèle</label>
+  <input type="text" id="model" value="openai/gpt-4o">
+  <label>🔄 Fallbacks (un par ligne)</label>
+  <textarea id="fallbacks" rows="3">anthropic/claude-sonnet-4-20250514&#10;google/gemini-2.5-pro&#10;deepseek/deepseek-chat</textarea>
+  <button onclick="saveSettings()">💾 Sauver</button>
+  <label>🔌 SSH (bientôt)</label>
+  <button onclick="alert('SSH mobile disponible bientôt dans la version Windows !')">En développement</button>
+</div>
+
+<div class="input-bar">
+  <textarea id="input" placeholder="Écris ton message..." rows="1" oninput="autoResize(this)"></textarea>
+  <button id="sendBtn" onclick="send()">⏎</button>
+</div>
+
+<div class="bottom-nav">
+  <button id="tabChat" class="active" onclick="switchTab('chat')">💬 Chat</button>
+  <button id="tabSettings" onclick="switchTab('settings')">⚙ Config</button>
+  <button id="tabScripts" onclick="tabScripts()">📜 Scripts</button>
+</div>
+
+<script>
+const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+let history = [];
+let streamingDiv = null;
+let keys = ['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'];
+let currentModel = 'openai/gpt-4o';
+let fallbacks = ['anthropic/claude-sonnet-4-20250514','google/gemini-2.5-pro','deepseek/deepseek-chat'];
+let currentKeyIdx = 0;
+
+document.getElementById('input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+
+// Load from localStorage
+try {
+  const saved = JSON.parse(localStorage.getItem('vzlom_mobile_config'));
+  if (saved) {
+    if (saved.keys && saved.keys.length) keys = saved.keys;
+    document.getElementById('apiKey').value = keys[0] || '';
+    currentModel = saved.model || currentModel;
+    document.getElementById('model').value = currentModel;
+    if (saved.fallbacks) {
+      fallbacks = saved.fallbacks;
+      document.getElementById('fallbacks').value = fallbacks.join('\n');
+    }
+  }
+} catch(e) {}
+
+function saveSettings() {
+  const key = document.getElementById('apiKey').value.trim();
+  if (key && !keys.includes(key)) keys.push(key);
+  else if (key && keys.length > 0) keys[0] = key;
+  currentModel = document.getElementById('model').value.trim() || currentModel;
+  fallbacks = document.getElementById('fallbacks').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  localStorage.setItem('vzlom_mobile_config', JSON.stringify({keys, model: currentModel, fallbacks}));
+  setStatus('✅ Config sauvegardée');
+}
+
+function autoResize(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+
+function addMsg(content, type) {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'msg ' + type;
+  if (type === 'assistant' && streamingDiv) {
+    streamingDiv.appendChild(document.createElement('br'));
+    streamingDiv.appendChild(div);
+  } else {
+    chat.appendChild(div);
+  }
+  if (type === 'assistant' && !streamingDiv) streamingDiv = div;
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  const chat = document.getElementById('chat');
+  const div = document.createElement('div');
+  div.className = 'typing';
+  div.id = 'typing';
+  div.innerHTML = '<span></span><span></span><span></span>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeTyping() {
+  const el = document.getElementById('typing');
+  if (el) el.remove();
+}
+
+function setStatus(s) {
+  document.getElementById('status').textContent = '● ' + s;
+}
+
+async function send() {
+  const input = document.getElementById('input');
+  const text = input.value.trim();
+  if (!text) return;
+
+  addMsg(text, 'user');
+  history.push({role:'user',content:text});
+  input.value = '';
+  autoResize(input);
+
+  streamingDiv = null;
+  addTyping();
+  setStatus('🤔 Réflexion...');
+
+  let attempts = 0;
+  let maxAttempts = keys.length + fallbacks.length;
+  let lastErr = '';
+
+  while (attempts <= maxAttempts) {
+    const key = keys[currentKeyIdx % keys.length];
+    const model = attempts < 1 ? currentModel
+                : fallbacks[attempts - 1] || currentModel;
+
+    try {
+      if (attempts > 0) setStatus(`🔄 Bascule → ${model}`);
+      else setStatus(`🤖 ${model}`);
+
+      removeTyping();
+      const msgDiv = addMsg('', 'assistant');
+
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + key,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://github.com/eemmee602/vzlom-algorithmic',
+          'X-Title': 'Vzlom Mobile'
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: history,
+          stream: true,
+          max_tokens: 4096
+        })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`HTTP ${res.status}: ${err.substring(0,100)}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = '';
+
+      while (true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, {stream: true});
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.substring(6);
+          if (data === '[DONE]') break;
+
+          try {
+            const json = JSON.parse(data);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta) {
+              full += delta;
+              msgDiv.textContent += delta;
+              document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+            }
+          } catch(e) {}
+        }
+      }
+
+      history.push({role:'assistant',content:full});
+      setStatus('✅ Terminé');
+      streamingDiv = null;
+      return; // Succès
+    } catch(e) {
+      lastErr = e.message;
+      setStatus(`⚠️ ${model} fail → suivant`);
+      removeTyping();
+      currentKeyIdx = (currentKeyIdx + 1) % keys.length;
+      attempts++;
+    }
+  }
+
+  setStatus(`❌ Tous échoués: ${lastErr}`);
+  removeTyping();
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
+  if (tab === 'chat') {
+    document.getElementById('tabChat').classList.add('active');
+    document.getElementById('chat').style.display = 'flex';
+    document.getElementById('settings').classList.remove('show');
+    document.querySelector('.input-bar').style.display = 'flex';
+  } else if (tab === 'settings') {
+    document.getElementById('tabSettings').classList.add('active');
+    document.getElementById('chat').style.display = 'none';
+    document.getElementById('settings').classList.add('show');
+    document.querySelector('.input-bar').style.display = 'none';
+    // Load saved values
+    document.getElementById('apiKey').value = keys[0] || '';
+    document.getElementById('model').value = currentModel;
+    document.getElementById('fallbacks').value = fallbacks.join('\n');
+  }
+}
+
+function tabScripts() {
+  alert('📜 Tes scripts sauvegardés apparaîtront ici bientôt !\nInterface liée à Vzlom Windows.');
+}
+
+// Auto-connect with saved key on load
+document.addEventListener('DOMContentLoaded', () => {
+  setStatus('✅ Prêt — envoie un message');
+});
+</script>
+</body>
+</html>

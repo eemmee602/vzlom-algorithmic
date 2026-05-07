@@ -1,0 +1,12 @@
+{
+  "api_keys": [
+    "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"
+  ],
+  "default_model": "openai/gpt-4o",
+  "fallback_models": [
+    "anthropic/claude-sonnet-4-20250514",
+    "google/gemini-2.5-pro",
+    "deepseek/deepseek-chat",
+    "mistralai/mistral-large-2411"
+  ]
+}
