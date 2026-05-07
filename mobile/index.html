@@ -110,7 +110,10 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
     <label>🤖 Modèle</label>
     <input type="text" id="inModel" value="google/gemini-2.0-flash-lite">
     <label>🔄 Fallbacks</label>
-    <textarea id="inFall" rows="2">anthropic/claude-sonnet-4-20250514</textarea>
+    <textarea id="inFall" rows="4">google/gemini-2.0-flash-lite
+deepseek/deepseek-chat
+mistralai/mistral-small-2501
+meta-llama/llama-3.2-3b-instruct</textarea>
     <label>⚙ Auto-agent</label>
     <select id="inAuto">
       <option value="off">❌ Off</option>
@@ -312,7 +315,7 @@ async function loop(txt,mem,isAuto){
 
   while(att<=maxAtt){
     const key=S.keys[S.ki%S.keys.length];
-    const model=att<1?S.model:(S.falls?.[att-1]||S.model);
+    const model=att<1?S.model:(S.falls?.[att-1]||S.model);addMsg('🔄 Tentative '+(att+1)+'/'+(maxAtt+1)+': '+model.split('/').pop(),'status');
     curDiv=null;inCode=false;cBuf='';doneShow=false;
 
     try{
