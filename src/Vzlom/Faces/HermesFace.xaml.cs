@@ -5,7 +5,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.IO;
 using Vzlom.Core;
-using System.IO;
 using System.Linq;
 using Vzlom.Models;
 

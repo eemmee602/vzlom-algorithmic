@@ -14,4 +14,9 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="SSH.NET" Version="2024.2.0" />
   </ItemGroup>
+
+  <!-- Copier api_defaults.json dans le dossier de sortie -->
+  <ItemGroup>
+    <Content Include="../../api_defaults.json" CopyToOutputDirectory="PreserveNewest" Link="api_defaults.json"/>
+  </ItemGroup>
 </Project>

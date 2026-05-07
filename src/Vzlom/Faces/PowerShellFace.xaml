@@ -1,0 +1,104 @@
+<UserControl x:Class="Vzlom.Faces.PowerShellFace"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="{StaticResource BgDarkBrush}">
+    <Grid Margin="8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Quick Commands Toolbar -->
+        <Border Grid.Row="0" Background="{StaticResource BgMediumBrush}" 
+                CornerRadius="8" Padding="8,6" Margin="0,0,0,6">
+            <WrapPanel>
+                <Button Content="📂 dir" Click="OnQuickCommand" Tag="dir" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="📍 cd" Click="OnQuickCommand" Tag="cd" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="🌐 ipconfig" Click="OnQuickCommand" Tag="ipconfig" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="🔍 tasklist" Click="OnQuickCommand" Tag="tasklist" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="📊 systeminfo" Click="OnQuickCommand" Tag="systeminfo" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="📡 netstat" Click="OnQuickCommand" Tag="netstat -an" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="💿 Get-PSDrive" Click="OnQuickCommand" Tag="Get-PSDrive" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="🧹 Clear" Click="OnClear" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"/>
+                <Button Content="🛑 Kill" Click="OnKillProcess" 
+                        FontSize="11" Height="24" Padding="8,0" Margin="0,0,4,4"
+                        CornerRadius="4"
+                        Background="{StaticResource AccentRedBrush}"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- Terminal Output -->
+        <Border Grid.Row="1" Background="#0a0a0a" CornerRadius="8" 
+                BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                Padding="4">
+            <ScrollViewer x:Name="OutputScroll" 
+                          VerticalScrollBarVisibility="Auto"
+                          Background="Transparent">
+                <TextBox x:Name="OutputBox" 
+                         IsReadOnly="True"
+                         Background="Transparent"
+                         Foreground="#00ff88"
+                         FontFamily="Consolas"
+                         FontSize="14"
+                         BorderThickness="0"
+                         TextWrapping="Wrap"
+                         Padding="8"
+                         Text="💻 Vzlom PowerShell Terminal
+═══════════════════════════════════
+Tape une commande ci-dessous et presse Enter.
+Utilise les boutons du haut pour des commandes rapides.
+"/>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Input Bar -->
+        <Border Grid.Row="2" Background="{StaticResource BgMediumBrush}" 
+                CornerRadius="8" Padding="8" Margin="0,6,0,0">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Text="PS>" 
+                           Foreground="#00ff88" FontFamily="Consolas"
+                           FontSize="15" FontWeight="Bold"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+
+                <TextBox x:Name="InputBox" Grid.Column="1"
+                         Background="{StaticResource BgDarkBrush}"
+                         Foreground="{StaticResource TextPrimaryBrush}"
+                         FontFamily="Consolas"
+                         FontSize="14"
+                         BorderThickness="0"
+                         Padding="6,4"
+                         CaretBrush="#00ff88"
+                         PreviewKeyDown="OnInputKeyDown"
+                         ToolTip="Enter = Exécuter"/>
+
+                <Button x:Name="BtnExecute" Grid.Column="2" Content="▶" 
+                        Click="OnExecute" Width="40" Height="32" FontSize="16"
+                        Background="{StaticResource AccentGreenBrush}" Foreground="#000"
+                        CornerRadius="6" Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

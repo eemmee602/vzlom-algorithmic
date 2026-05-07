@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using ICSharpCode.AvalonEdit;
+using System.IO;
 
 namespace Vzlom.Faces;
 
@@ -32,7 +33,7 @@ public partial class EditorFace : UserControl
 
         if (dialog.ShowDialog() == true)
         {
-            Editor.Document.Text = System.IO.File.ReadAllText(dialog.FileName);
+            Editor.Document.Text = File.ReadAllText(dialog.FileName);
             _currentFile = dialog.FileName;
             UpdateInfoBar();
         }
@@ -42,7 +43,7 @@ public partial class EditorFace : UserControl
     {
         if (_currentFile != null)
         {
-            System.IO.File.WriteAllText(_currentFile, Editor.Document.Text);
+            File.WriteAllText(_currentFile, Editor.Document.Text);
             UpdateInfoBar();
         }
         else
@@ -55,7 +56,7 @@ public partial class EditorFace : UserControl
 
             if (dialog.ShowDialog() == true)
             {
-                System.IO.File.WriteAllText(dialog.FileName, Editor.Document.Text);
+                File.WriteAllText(dialog.FileName, Editor.Document.Text);
                 _currentFile = dialog.FileName;
                 UpdateInfoBar();
             }
@@ -79,7 +80,7 @@ public partial class EditorFace : UserControl
     {
         var lines = Editor.Document.LineCount;
         var chars = Editor.Document.TextLength;
-        var file = _currentFile != null ? System.IO.Path.GetFileName(_currentFile) : "non-sauvegardé";
+        var file = _currentFile != null ? Path.GetFileName(_currentFile) : "non-sauvegardé";
         InfoBar.Text = $"{file} · {lines} lignes · {chars} chars";
     }
 }
