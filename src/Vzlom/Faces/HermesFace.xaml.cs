@@ -256,7 +256,7 @@ MÉMOIRE ACTUELLE :
 
     private void OnInputKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && !Keyboard.IsKeyDown(Key.LeftCtrl) && !Keyboard.IsKeyDown(Key.RightCtrl))
+        if (e.Key == Key.Enter && !Keyboard.IsKeyDown(Key.LeftShift) && !Keyboard.IsKeyDown(Key.RightShift))
         {
             e.Handled = true;
             OnSend(sender, e);
