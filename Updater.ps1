@@ -1,225 +1,236 @@
 <#
 .SYNOPSIS
-  Vzlom Updater — Télécharge, compile et installe Vzlom Algorithmic
+  Vzlom Updater v2.0 — Installation complète automatisée
 .DESCRIPTION
-  Script PowerShell autonome. Vérifie Python + .NET 8, télécharge
-  les sources GitHub, compile, installe et lance Vzlom.
-.NOTES
-  Auteur : Hermès pour Emerick
-  Date   : 2026-05-07
+  Vérifie Python, .NET 8, télécharge les sources GitHub,
+  compile, installe et lance Vzlom Algorithmic.
+  Nécessite : Windows 10+, internet.
+  Fait TOUT tout seul.
 #>
 
 $ErrorActionPreference = "Stop"
 $Host.UI.RawUI.WindowTitle = "Vzlom Updater"
 
-Write-Host "╔" -NoNewline
-Write-Host "══════════════════════════════════════" -NoNewline -ForegroundColor Cyan
-Write-Host "╗" -NoNewline
-Write-Host ""
-Write-Host "║" -NoNewline -ForegroundColor Cyan
-Write-Host "    Vzlom Updater v2.0" -ForegroundColor White
-Write-Host "║" -NoNewline -ForegroundColor Cyan
-Write-Host "    Installation automatique PC" -ForegroundColor White
-Write-Host "╚" -NoNewline
-Write-Host "══════════════════════════════════════" -NoNewline -ForegroundColor Cyan
-Write-Host "╝" -NoNewline
-Write-Host ""
+Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║        Vzlom Algorithmic Updater v2.0        ║" -ForegroundColor White
+Write-Host "║    Installation complète automatisée         ║" -ForegroundColor White
+Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
-# ─── Dossier d'installation (là où est le script) ───
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $ScriptDir) { $ScriptDir = "." }
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+if (-not $ScriptDir) { $ScriptDir = Get-Location }
 $InstallDir = $ScriptDir
-Write-Host "📍 Dossier d'installation : $InstallDir" -ForegroundColor Gray
+Write-Host "  📂 Installation dans : $InstallDir" -ForegroundColor Gray
 
-# ─── 1. Vérifier Python ───
-Write-Host ""
-Write-Host "─── 1/5  Python ───" -ForegroundColor Cyan
+# ═══════════════════════════════════════════════════════
+# 1/6 — VÉRIFIER / INSTALLER PYTHON
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [1/6] Python ───" -ForegroundColor Cyan
 
-$python = (Get-Command "python" -ErrorAction SilentlyContinue) -or (Get-Command "python3" -ErrorAction SilentlyContinue)
-$pythonPath = ""
-
+$python = $null
 if (Get-Command "python" -ErrorAction SilentlyContinue) {
     $v = & python --version 2>&1
-    Write-Host "  ✅ Python trouvé : $v" -ForegroundColor Green
-    $pythonPath = "python"
-}
-elseif (Get-Command "python3" -ErrorAction SilentlyContinue) {
-    $v = & python3 --version 2>&1
-    Write-Host "  ✅ Python trouvé : $v" -ForegroundColor Green
-    $pythonPath = "python3"
-}
-else {
+    Write-Host "  ✅ Python : $v" -ForegroundColor Green
+    $python = "python"
+} else {
     Write-Host "  ⏳ Python non trouvé. Téléchargement..." -ForegroundColor Yellow
-    $pythonUrl = "https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
-    $installer = "$env:TEMP\python_installer.exe"
+    $url = "https://www.python.org/ftp/python/3.12.3/python-3.12.3-amd64.exe"
+    $exe = "$env:TEMP\python_installer.exe"
     try {
-        Invoke-WebRequest -Uri $pythonUrl -OutFile $installer -UseBasicParsing
-        Write-Host "  📦 Installation de Python (silencieuse)..." -ForegroundColor Yellow
-        Start-Process -Wait -FilePath $installer -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1"
+        Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
+        Start-Process -Wait -FilePath $exe -ArgumentList "/quiet InstallAllUsers=0 PrependPath=1"
+        # Rafraîchir le PATH
         $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + $env:Path
         Write-Host "  ✅ Python installé !" -ForegroundColor Green
-        $pythonPath = "python"
-    }
-    catch {
-        Write-Host "  ❌ Échec du téléchargement de Python. Télécharge-le manuellement :" -ForegroundColor Red
-        Write-Host "     https://www.python.org/downloads/" -ForegroundColor White
-        Write-Host "     (coche 'Add Python to PATH' pendant l'install)"
-        Read-Host "     Appuie sur Entrée après avoir installé Python"
-        $pythonPath = "python"
+        $python = "python"
+    } catch {
+        Write-Host "  ❌ Impossible de télécharger Python : $_" -ForegroundColor Red
+        Write-Host "  Va sur https://www.python.org/downloads/, installe, puis relance"
+        Read-Host "`nAppuie sur Entrée pour quitter"
+        exit 1
     }
 }
 
-# ─── 2. Vérifier .NET 8 SDK ───
-Write-Host ""
-Write-Host "─── 2/5  .NET 8 ───" -ForegroundColor Cyan
+# ═══════════════════════════════════════════════════════
+# 2/6 — VÉRIFIER .NET 8 SDK
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [2/6] .NET 8 SDK ───" -ForegroundColor Cyan
 
-$dotnetVersion = ""
+$dotnetOk = $false
 try {
-    $dotnetVersion = & dotnet --version 2>&1
-    Write-Host "  ✅ .NET trouvé : $dotnetVersion" -ForegroundColor Green
-}
-catch {
+    $v = & dotnet --version 2>&1
+    Write-Host "  ✅ .NET SDK : $v" -ForegroundColor Green
+    $dotnetOk = $true
+} catch {
     Write-Host "  ⏳ .NET 8 SDK non trouvé." -ForegroundColor Yellow
-    Write-Host "  🔗 Télécharge-le ici : https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor White
-    Write-Host "     (prend le SDK, pas le Runtime)"
-    Read-Host "     Appuie sur Entrée APRÈS avoir installé .NET 8 SDK"
+    Write-Host "  🔗 Télécharge depuis : https://dotnet.microsoft.com/en-us/download/dotnet/thank-you/sdk-8.0.404-windows-x64-installer" -ForegroundColor White
+    Write-Host "     (SDK 8.0.404, pas Runtime)"
+    Read-Host "  → Fais-le, puis appuie sur Entrée quand c'est installé"
     try {
-        $dotnetVersion = & dotnet --version 2>&1
-        Write-Host "  ✅ .NET $dotnetVersion OK" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "  ❌ .NET toujours pas trouvé. Installe-le puis relance le script." -ForegroundColor Red
+        $v = & dotnet --version 2>&1
+        Write-Host "  ✅ .NET SDK : $v" -ForegroundColor Green
+        $dotnetOk = $true
+    } catch {
+        Write-Host "  ❌ Toujours pas trouvé. Relance le script après installation." -ForegroundColor Red
         Read-Host "Appuie sur Entrée pour quitter"
         exit 1
     }
 }
 
-# ─── 3. Télécharger les sources ───
-Write-Host ""
-Write-Host "─── 3/5  Téléchargement des sources GitHub ───" -ForegroundColor Cyan
+# ═══════════════════════════════════════════════════════
+# 3/6 — TÉLÉCHARGER LES SOURCES
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [3/6] Téléchargement des sources GitHub ───" -ForegroundColor Cyan
 
-$srcDir = "$env:TEMP\vzlom_src"
-if (Test-Path $srcDir) { Remove-Item -Recurse -Force $srcDir }
-New-Item -ItemType Directory -Path $srcDir -Force | Out-Null
-
-# Télécharger l'archive ZIP du repo
-$zipUrl = "https://api.github.com/repos/eemmee602/vzlom-algorithmic/zipball/main"
-$zipFile = "$env:TEMP\vzlom_src.zip"
+$tmpDir = "$env:TEMP\vzlom_$(Get-Random)"
+New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
+$zipFile = "$tmpDir\source.zip"
 
 try {
-    $headers = @{ "Accept" = "application/vnd.github+json" }
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipFile -UseBasicParsing -Headers $headers
-    Expand-Archive -Path $zipFile -DestinationPath $srcDir -Force
+    # Token GitHub Emerick pour accès repo privé
+    $headers = @{
+        "Authorization" = "token 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"
+        "Accept"        = "application/vnd.github+json"
+        "User-Agent"    = "VzlomUpdater"
+    }
+    # Récupérer l'archive via l'API GitHub (fonctionne même avec repos privés)
+    Invoke-WebRequest -Uri "https://api.github.com/repos/eemmee602/vzlom-algorithmic/zipball/main" `
+                      -Headers $headers `
+                      -OutFile $zipFile `
+                      -UseBasicParsing
+    
+    Expand-Archive -Path $zipFile -DestinationPath $tmpDir -Force
     Remove-Item $zipFile -Force
-    Write-Host "  ✅ Sources téléchargées" -ForegroundColor Green
-}
-catch {
-    # Fallback: cloner avec git
-    Write-Host "  ⏳ Téléchargement direct échoué, tentative avec git..." -ForegroundColor Yellow
-    try {
-        & git clone --depth 1 https://github.com/eemmee602/vzlom-algorithmic.git "$srcDir\repo" 2>&1
-        $srcDir = "$srcDir\repo"
-        Write-Host "  ✅ Clone git réussi" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "  ❌ Impossible de télécharger les sources : $_" -ForegroundColor Red
-        Read-Host "Appuie sur Entrée pour quitter"
-        exit 1
-    }
-}
-
-# Trouver le dossier racine (GitHub zip ajoute un sous-dossier)
-$rootDir = Get-ChildItem $srcDir -Directory | Select-Object -First 1 -ExpandProperty FullName
-if (-not $rootDir) { $rootDir = $srcDir }
-
-$csproj = Get-ChildItem -Path $rootDir -Recurse -Filter "Vzlom.csproj" | Select-Object -First 1 -ExpandProperty FullName
-if (-not $csproj) {
-    Write-Host "  ❌ Vzlom.csproj introuvable dans les sources" -ForegroundColor Red
-    Read-Host "Appuie sur Entrée pour quitter"
+    
+    # Trouver le dossier racine (GitHub ajoute un sous-dossier)
+    $rootDir = Get-ChildItem $tmpDir -Directory | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $rootDir) { throw "Archive vide" }
+    
+    # Trouver le .csproj
+    $csproj = Get-ChildItem -Path $rootDir -Recurse -Filter "Vzlom.csproj" | Select-Object -First 1 -ExpandProperty FullName
+    if (-not $csproj) { throw "Vzlom.csproj introuvable" }
+    
+    Write-Host "  ✅ Sources téléchargées (privé)"
+    Write-Host "  📄 Projet : $csproj"
+    
+} catch {
+    Write-Host "  ❌ Échec du téléchargement : $_" -ForegroundColor Red
+    Write-Host "  Vérifie ta connexion internet ou le token GitHub."
+    Read-Host "`nAppuie sur Entrée pour quitter"
     exit 1
 }
-Write-Host "  📄 Projet : $csproj" -ForegroundColor Gray
 
-# ─── 4. Compiler ───
-Write-Host ""
-Write-Host "─── 4/5  Compilation ───" -ForegroundColor Cyan
+# ═══════════════════════════════════════════════════════
+# 4/6 — COMPILER
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [4/6] Compilation .NET 8 ───" -ForegroundColor Cyan
 
-$publishDir = "$env:TEMP\vzlom_publish"
-if (Test-Path $publishDir) { Remove-Item -Recurse -Force $publishDir }
+$publishDir = "$env:TEMP\vzlom_publish_$(Get-Random)"
 
 try {
-    Write-Host "  🔨 dotnet publish Release win-x64..." -ForegroundColor Yellow
-    & dotnet publish $csproj -c Release -r win-x64 --self-contained false -o $publishDir
-    if ($LASTEXITCODE -ne 0) { throw "dotnet publish a échoué (code $LASTEXITCODE)" }
+    Write-Host "  🔨 dotnet publish (Release, win-x64)..."
+    $output = & dotnet publish $csproj -c Release -r win-x64 --self-contained false -o $publishDir 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  ⚠ Erreur de compilation. Détails :" -ForegroundColor Red
+        Write-Host $output
+        throw "dotnet publish exit code: $LASTEXITCODE"
+    }
     Write-Host "  ✅ Compilation réussie !" -ForegroundColor Green
-}
-catch {
-    Write-Host "  ❌ Erreur de compilation : $_" -ForegroundColor Red
-    Write-Host "  Essaie de compiler manuellement :" -ForegroundColor White
-    Write-Host "     dotnet publish `"$csproj`" -c Release -r win-x64" -ForegroundColor White
-    Read-Host "Appuie sur Entrée pour quitter"
+} catch {
+    Write-Host "  ❌ Erreur : $_" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Astuce : essaie de compiler manuellement dans une console :"
+    Write-Host "    cd `"$(Split-Path $csproj -Parent)`""
+    Write-Host "    dotnet publish -c Release -r win-x64 --self-contained false"
+    Read-Host "`nAppuie sur Entrée pour quitter"
     exit 1
 }
 
-# ─── 5. Installer ───
-Write-Host ""
-Write-Host "─── 5/5  Installation ───" -ForegroundColor Cyan
+# ═══════════════════════════════════════════════════════
+# 5/6 — INSTALLER
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [5/6] Installation ───" -ForegroundColor Cyan
 
-# Sauvegarder les configs existantes
+# Sauvegarder les fichiers de config existants
 $configFiles = @("api_keys.json", "ssh_config.json", "vzlom_memory.md", "permissions.json")
-$backups = @{}
+$configBackups = @{}
+
 foreach ($cf in $configFiles) {
     $cfPath = Join-Path $InstallDir $cf
     if (Test-Path $cfPath) {
-        $backups[$cf] = Get-Content $cfPath -Raw
-        Write-Host "  ♻ Config préservée : $cf"
+        try {
+            $configBackups[$cf] = Get-Content $cfPath -Raw
+            Write-Host "  ♻ Config préservée : $cf"
+        } catch {
+            Write-Host "  ⚠ Impossible de lire : $cf"
+        }
     }
 }
 
 # Copier les fichiers compilés
-Get-ChildItem $publishDir | ForEach-Object {
+$fileCount = 0
+Get-ChildItem $publishDir -File | ForEach-Object {
     $dest = Join-Path $InstallDir $_.Name
     Copy-Item $_.FullName $dest -Force
+    $fileCount++
 }
 
-# Copier aussi les fichiers auxiliaires
-foreach ($extra in @("update.json", "api_defaults.json")) {
-    $extraSrc = Join-Path (Split-Path $csproj -Parent) "..\$extra"
-    if (Test-Path $extraSrc) {
-        Copy-Item $extraSrc (Join-Path $InstallDir $extra) -Force
+# Copier api_defaults.json et update.json
+$sourceRoot = Split-Path $csproj -Parent
+foreach ($extra in @("api_defaults.json", "update.json")) {
+    $src = Join-Path $sourceRoot $extra
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $InstallDir $extra) -Force
+        $fileCount++
     }
 }
 
 # Restaurer les configs
-foreach ($cf in $backups.Keys) {
-    Set-Content -Path (Join-Path $InstallDir $cf) -Value $backups[$cf]
+foreach ($cf in $configBackups.Keys) {
+    Set-Content -Path (Join-Path $InstallDir $cf) -Value $configBackups[$cf] -NoNewline
 }
 
-# Supprimer le dossier temporaire
-Remove-Item -Recurse -Force $publishDir -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force $srcDir -ErrorAction SilentlyContinue
+Write-Host "  ✅ $fileCount fichiers copiés" -ForegroundColor Green
+Write-Host "  📁 Destination : $InstallDir"
 
+# ═══════════════════════════════════════════════════════
+# 6/6 — NETTOYAGE + LANCEMENT
+# ═══════════════════════════════════════════════════════
+Write-Host "`n─── [6/6] Nettoyage ───" -ForegroundColor Cyan
+
+Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+Remove-Item $publishDir -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "  ✅ Terminé"
+
+# ─── Résumé ───
 Write-Host ""
-Write-Host "══════════════════════════════════════" -ForegroundColor Cyan
-Write-Host "  ✅ Vzlom installé dans :" -ForegroundColor Green
-Write-Host "     $InstallDir" -ForegroundColor White
-Write-Host "" -ForegroundColor White
-Write-Host "  🚀 Pour lancer :" -ForegroundColor Green
-Write-Host "     $(Join-Path $InstallDir 'Vzlom.exe')" -ForegroundColor White
-Write-Host "══════════════════════════════════════" -ForegroundColor Cyan
+Write-Host "╔══════════════════════════════════════════════╗" -ForegroundColor Cyan
+Write-Host "║" -NoNewline -ForegroundColor Cyan
+Write-Host "          ✅  VZLOM ALGORITHMIC  " -NoNewline -ForegroundColor Green
+Write-Host "  ║" -ForegroundColor Cyan
+Write-Host "║" -NoNewline -ForegroundColor Cyan
+Write-Host "                INSTALLÉ !             " -NoNewline -ForegroundColor White
+Write-Host "  ║" -ForegroundColor Cyan
+Write-Host "╠══════════════════════════════════════════════╣" -ForegroundColor Cyan
+Write-Host "║" -NoNewline -ForegroundColor Cyan
+Write-Host "  📂 $(Join-Path $InstallDir "Vzlom.exe")" -ForegroundColor White
+Write-Host "║" -NoNewline -ForegroundColor Cyan
+Write-Host "  🔑 Ton compte :" -NoNewline -ForegroundColor Gray
+Write-Host " Emerick / 2208" -NoNewline -ForegroundColor Cyan
+Write-Host "          ║" -ForegroundColor Cyan
+Write-Host "╚══════════════════════════════════════════════╝" -ForegroundColor Cyan
 Write-Host ""
 
-# Proposer de lancer
-$choice = Read-Host "  Lancer Vzlom maintenant ? (O/n)"
-if ($choice -ne "n") {
+$launch = Read-Host "  🚀 Lancer Vzlom maintenant ? (O/n)"
+if ($launch -ne "n") {
     try {
-        Start-Process (Join-Path $InstallDir "Vzlom.exe")
-        Write-Host "  🚀 Vzlom lancé !" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "  Lance-le manuellement : $(Join-Path $InstallDir 'Vzlom.exe')" -ForegroundColor Yellow
+        $exe = Join-Path $InstallDir "Vzlom.exe"
+        Start-Process -FilePath $exe
+        Write-Host "  🚀 Lancé !" -ForegroundColor Green
+    } catch {
+        Write-Host "  ⚠ Lance-le manuellement : $(Join-Path $InstallDir 'Vzlom.exe')" -ForegroundColor Yellow
     }
 }
 
-Read-Host "`nAppuie sur Entrée pour fermer"
+Write-Host ""
+Read-Host "Appuie sur Entrée pour fermer"
