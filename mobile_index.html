@@ -286,8 +286,12 @@ function rotateKey(){
 
 // ─── Guest auto-login ───
 async function guestLogin(){
+  const overlay=document.getElementById('loading-overlay');
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),8000);
   try{
-    const r=await fetch(`${BRIDGE}/auth/guest`,{method:'POST'});
+    const r=await fetch(`${BRIDGE}/auth/guest`,{method:'POST',signal:controller.signal});
+    clearTimeout(timeout);
     const d=await r.json();
     if(d.status==='ok'){
       S.token=d.token;S.nick=d.nickname;
@@ -296,14 +300,21 @@ async function guestLogin(){
       throw new Error(d.error||'guest failed');
     }
   }catch(e){
-    document.getElementById('loading-overlay').classList.add('hidden');
-    showError('Erreur réseau');
+    clearTimeout(timeout);
+    overlay.classList.add('hidden');
+    const info=`<br>URL: ${BRIDGE}/auth/guest<br>Erreur: ${e.message||'?'}${e.name==='AbortError'?'<br><b>⏱ Délai dépassé (8s)</b> — le serveur ne répond pas':'']}`;
+    showError('Erreur réseau'+info);
   }
 }
 
 function showError(msg){
   const ch=document.getElementById('chat');
-  ch.innerHTML=`<div style="text-align:center;padding:40px;"><h1 style="color:#ff4444">${msg}</h1><p style="color:#888;margin-top:8px">Réessayez ou vérifiez votre connexion</p></div>`;
+  ch.innerHTML=`<div style="text-align:center;padding:30px 20px;">
+    <div style="font-size:40px;margin-bottom:12px">🔌</div>
+    <h1 style="color:#ff4444">Connexion échouée</h1>
+    <p style="color:#aaa;margin-top:12px;font-size:12px;white-space:pre-wrap">${msg}</p>
+    <button onclick="location.reload()" style="margin-top:20px;padding:10px 24px;background:#00d4ff;color:#000;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-family:Consolas,monospace;font-weight:bold">🔄 Réessayer</button>
+  </div>`;
 }
 
 // ─── Auth (compat – token localStorage) ───
