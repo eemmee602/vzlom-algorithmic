@@ -262,7 +262,7 @@ def _stream_openrouter(resp, wfile):
     full = ""
     buf = ""
     while True:
-        chunk = resp.read(1)
+        chunk = resp.read(4096)
         if not chunk: break
         buf += chunk.decode("utf-8", errors="replace")
         while "\n" in buf:
@@ -286,7 +286,7 @@ def _stream_gemini(resp, wfile):
     full = ""
     buf = ""
     while True:
-        chunk = resp.read(1)
+        chunk = resp.read(4096)
         if not chunk: break
         buf += chunk.decode("utf-8", errors="replace")
         while "\n" in buf:
@@ -472,6 +472,9 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         if path in ("/", "/index.html", "/mobile.html"):
             self.serve_html(); return
 
+        if path in ("/dex", "/dex.html", "/DEX_TLMN.html"):
+            self.serve_html("DEX_TLMN.html"); return
+
         if path == "/favicon.ico":
             fp = os.path.join(BASE_DIR, "favicon.ico")
             if os.path.exists(fp):
@@ -580,6 +583,11 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             nick = get_user_from_token(token)
             self._send_json({"status": "ok", "nickname": nick} if nick else {"error": "Token invalide"},
                               401 if not nick else 200); return
+
+        if path == "/auth/guest":
+            nick = "Guest_" + secrets.token_hex(4)
+            token = create_session(nick)
+            self._send_json({"status": "ok", "nickname": nick, "token": token}); return
 
         if path == "/api/chat":
             proxy_chat(self, data); return

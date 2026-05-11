@@ -9,26 +9,12 @@
 body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monospace;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 #stars-canvas{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none}
 
-/* Screens */
-.screen{position:fixed;top:0;left:0;width:100%;height:100%;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;background:#0d0d1a;transition:opacity .3s}
-.screen.hidden{opacity:0;pointer-events:none}
-.screen h1{font-size:22px;color:#00d4ff}
-.screen .sub{font-size:10px;color:#666;margin-bottom:8px}
-.screen input{width:100%;max-width:280px;background:#1a1a2e;color:#e0e0e0;border:1px solid #2a2a4a;border-radius:8px;padding:12px;font-size:14px;font-family:Consolas,monospace;outline:none;text-align:center}
-.screen input:focus{border-color:#00d4ff}
-.screen .btn-row{display:flex;gap:8px;width:100%;max-width:280px}
-.screen button{flex:1;background:#00d4ff;color:#000;border:none;border-radius:8px;padding:12px;font-size:14px;font-weight:bold;cursor:pointer;font-family:Consolas,monospace}
-.screen button.sec{background:#1a1a2e;color:#888;border:1px solid #2a2a4a}
-.screen .err{font-size:11px;color:#ff4444;min-height:18px;max-width:280px;text-align:center}
-.screen .link{font-size:11px;color:#888;cursor:pointer;text-decoration:underline;margin-top:4px}
-
 /* App */
-.app{flex:1;display:flex;flex-direction:column;z-index:1;position:relative;opacity:0;transition:opacity .3s}
-.app.show{opacity:1}
+.app{flex:1;display:flex;flex-direction:column;z-index:1;position:relative}
 .header{background:#16213e;padding:8px 12px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #2a2a4a}
 .header h1{font-size:14px;color:#00d4ff}
 .header .right{font-size:10px;color:#888;margin-left:auto;display:flex;align-items:center;gap:4px}
-.header .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block}
 .dot.idle{background:#888}.dot.think{background:#00d4ff;animation:pulse .8s ease-in-out infinite}.dot.work{background:#ffb90f;animation:pulse .6s ease-in-out infinite}.dot.err{background:#ff4444}.dot.done{background:#00ff88}
 .tword{font-size:10px;color:#00d4ff;font-weight:bold;min-width:70px;text-align:right}
 @keyframes pulse{0%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.2)}100%{opacity:.3;transform:scale(.8)}}
@@ -73,36 +59,23 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
 .key-row .kid{color:#00d4ff;font-family:Consolas;flex-shrink:0;min-width:50px}
 .key-row .kstat{font-size:9px;color:#888;margin-left:auto;flex-shrink:0}
 .key-row button{background:none;border:1px solid #ff4444;color:#ff4444;border-radius:4px;padding:2px 6px;font-size:10px;cursor:pointer}
+
+/* Loading overlay */
+#loading-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#0d0d1a;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s}
+#loading-overlay.hidden{opacity:0;pointer-events:none}
+#loading-overlay .spin{width:40px;height:40px;border:3px solid #2a2a4a;border-top-color:#00d4ff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-overlay .ltxt{margin-top:16px;font-size:12px;color:#666}
 </style>
 </head>
 <body>
 
 <canvas id="stars-canvas"></canvas>
 
-<!-- Screen 1: Login -->
-<div class="screen" id="sLogin">
-  <h1>🖥️ VZLOM</h1>
-  <p class="sub">Connexion</p>
-  <input type="text" id="inNick" placeholder="Surnom" autocomplete="off">
-  <input type="password" id="inPass" placeholder="Mot de passe" autocomplete="off">
-  <div class="err" id="errLogin"></div>
-  <div class="btn-row">
-    <button onclick="login()">🔑 Connexion</button>
-    <button class="sec" onclick="showRegister()">📝 Créer</button>
-  </div>
-</div>
-
-<!-- Screen 2: Register -->
-<div class="screen hidden" id="sRegister">
-  <h1>📝 Créer un compte</h1>
-  <p class="sub">Vzlom</p>
-  <input type="text" id="inRegNick" placeholder="Surnom" autocomplete="off">
-  <input type="password" id="inRegPass" placeholder="Mot de passe" autocomplete="off">
-  <div class="err" id="errReg"></div>
-  <div class="btn-row">
-    <button onclick="register()">✅ Créer</button>
-    <button class="sec" onclick="hideRegister()">← Retour</button>
-  </div>
+<!-- Loading overlay -->
+<div id="loading-overlay">
+  <div class="spin"></div>
+  <div class="ltxt">Connexion...</div>
 </div>
 
 <!-- Main App -->
@@ -180,15 +153,12 @@ meta-llama/llama-3.3-70b-instruct</textarea>
 })();
 
 // State
-// Auto-detect bridge URL from current page host
-// Utilise l'origine courante (port 8766 du proxy mobile) qui relaie vers le bridge
 const BRIDGE = window.location.origin;
 let S={token:'',nick:'',keys:[],model:'openai/gpt-4o-mini',falls:['deepseek/deepseek-chat','mistralai/mistral-small-2501','meta-llama/llama-3.3-70b-instruct'],fallback:'deepseek/deepseek-chat',auto:'smart',history:[],ki:0,busy:false,iters:0,maxIters:5};
 
-// ─── Config loader (modèles et clés méta uniquement, pas de clé brute) ───
+// ─── Config loader (modèles et clés méta uniquement) ───
 async function loadConfig(){
   try{
-    // Charger la config (modèles uniquement, plus de clé exposée)
     const res=await fetch(`${BRIDGE}/api/config`);
     if(res.ok){
       const cfg=await res.json();
@@ -204,7 +174,7 @@ async function loadConfig(){
   }
 }
 
-// Charger les clés depuis le localStorage (gestion locale côté client)
+// Charger les clés depuis le localStorage
 function loadKeys(){
   try{
     const sv=JSON.parse(localStorage.getItem('v2cfg')||'{}');
@@ -255,7 +225,6 @@ function addKeyManual(){
   if(S.keys.some(k=>k.key===val)){
     document.getElementById('errLogin').textContent='Clé déjà ajoutée';return;
   }
-  // Envoyer au bridge (protégé) pour stockage serveur
   fetch(`${BRIDGE}/admin/keys?token=${S.token}`,{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -264,7 +233,6 @@ function addKeyManual(){
     if(r.error)throw new Error(r.error);
     addMsg('✅ Clé ajoutée et synchronisée avec le serveur (total: '+S.keys.length+')','sys');
   }).catch(e=>{
-    // En cas d'échec du serveur, on garde en local uniquement
     addMsg('⚠️ Stockage serveur échoué: '+e.message+'. Clé gardée en local.','sys');
     _addLocalKey(val);
   });
@@ -298,12 +266,11 @@ function importKeysBulk(){
 function removeKey(i){
   const k=S.keys[i];
   if(k.source==='env')return;
-  // Demander aussi la suppression au serveur
   fetch(`${BRIDGE}/admin/keys?token=${S.token}`,{
     method:'DELETE',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({id:k.id})
-  }).catch(()=>{}); // Ignore errors
+  }).catch(()=>{});
   S.keys.splice(i,1);
   if(S.ki>=S.keys.length)S.ki=0;
   refreshKeyUI();
@@ -317,88 +284,54 @@ function rotateKey(){
   addMsg('🔄 Clé active: '+S.keys[S.ki].id.substring(0,8),'keyinfo');
 }
 
-// Générateur d'ID (fallback browser)
-const secrets=window.crypto&&window.crypto.getRandomValues
-  ? {token_hex:n=>{const a=new Uint8Array(n);window.crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,n*2)} }
-  : {token_hex:n=>Math.random().toString(36).slice(2,2+n)};
-
-const WORDS=['Thinking...','Analyzing...','Reading...','Beaming...','Imagining...','Coding...','Searching...','Scanning...','Synthesizing...','Crafting...','Forging...','Mapping...'];
-let twInt=null;
-
-function twStart(){
-  let i=0;const e=document.getElementById('tword');
-  e.textContent='Thinking...';e.style.color='#0df';
-  twInt=setInterval(()=>{i=(i+1)%WORDS.length;e.textContent=WORDS[i]},1200);
-}
-function twStop(){
-  if(twInt){clearInterval(twInt);twInt=null}
-  document.getElementById('tword').textContent='Prêt';
-  document.getElementById('tword').style.color='#888';
-}
-function sdot(c){document.getElementById('sdot').className='dot '+c}
-
-// Appel au PROXY serveur (clé jamais exposée côté client)
-async function proxyChat(messages,model,max_tokens){
-  const res=await fetch(`${BRIDGE}/api/chat?token=${S.token}`,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({model,messages,max_tokens})
-  });
-  if(!res.ok){
-    if(res.status===429)throw new Error('RATE_LIMIT');
-    const txt=await res.text();
-    throw new Error(`HTTP ${res.status}: ${txt.substring(0,200)}`);
-  }
-  return res; // Stream SSE
-}
-
-// Auth
-function showRegister(){
-  document.getElementById('sLogin').classList.add('hidden');
-  document.getElementById('sRegister').classList.remove('hidden');
-}
-function hideRegister(){
-  document.getElementById('sRegister').classList.add('hidden');
-  document.getElementById('sLogin').classList.remove('hidden');
-}
-
-async function login(){
-  const n=document.getElementById('inNick').value.trim(),p=document.getElementById('inPass').value.trim();
-  if(!n||!p){document.getElementById('errLogin').textContent='Champs requis';return}
-  document.getElementById('errLogin').textContent='⏳ Connexion...';
+// ─── Guest auto-login ───
+async function guestLogin(){
   try{
-    const r=await bp('/auth/login',{nickname:n,password:p});
-    if(r.error){document.getElementById('errLogin').textContent=r.error;return}
-    S.token=r.token;S.nick=r.nickname;
-    afterLogin();
+    const r=await fetch(`${BRIDGE}/auth/guest`,{method:'POST'});
+    const d=await r.json();
+    if(d.status==='ok'){
+      S.token=d.token;S.nick=d.nickname;
+      afterLogin();
+    }else{
+      throw new Error(d.error||'guest failed');
+    }
   }catch(e){
-    document.getElementById('errLogin').textContent='Erreur réseau';
+    document.getElementById('loading-overlay').classList.add('hidden');
+    showError('Erreur réseau');
   }
 }
 
-async function register(){
-  const n=document.getElementById('inRegNick').value.trim(),p=document.getElementById('inRegPass').value.trim();
-  if(!n||!p){document.getElementById('errReg').textContent='Champs requis';return}
-  document.getElementById('errReg').textContent='⏳ Création...';
-  try{
-    const r=await bp('/auth/register',{nickname:n,password:p});
-    if(r.error){document.getElementById('errReg').textContent=r.error;return}
-    S.token=r.token;S.nick=r.nickname;
-    afterLogin();
-  }catch(e){
-    document.getElementById('errReg').textContent='Erreur réseau';
+function showError(msg){
+  const ch=document.getElementById('chat');
+  ch.innerHTML=`<div style="text-align:center;padding:40px;"><h1 style="color:#ff4444">${msg}</h1><p style="color:#888;margin-top:8px">Réessayez ou vérifiez votre connexion</p></div>`;
+}
+
+// ─── Auth (compat – token localStorage) ───
+async function checkToken(){
+  const savedToken=localStorage.getItem('vzlom_token');
+  if(savedToken){
+    try{
+      const r=await fetch(`${BRIDGE}/auth/check?token=${savedToken}`);
+      const d=await r.json();
+      if(d&&d.nickname){
+        S.token=savedToken;S.nick=d.nickname;
+        afterLogin();return;
+      }
+    }catch(e){}
+    localStorage.removeItem('vzlom_token');
   }
+  // Pas de token → guest
+  guestLogin();
 }
 
 function afterLogin(){
-  document.getElementById('sLogin').classList.add('hidden');
-  document.getElementById('sRegister').classList.add('hidden');
-  document.getElementById('app').classList.add('show');
+  document.getElementById('loading-overlay').classList.add('hidden');
+  document.getElementById('app').style.opacity='1';
+  document.getElementById('app').style.pointerEvents='auto';
   document.getElementById('userBadge').textContent='👤 '+S.nick;
   document.getElementById('pnNick').textContent=S.nick;
   localStorage.setItem('vzlom_token',S.token);
   loadKeys();
-  // Charger config du bridge (modèles uniquement)
   loadConfig();
   document.getElementById('inModel').value=S.model;
   document.getElementById('inFall').value=(S.falls||[]).join('\n');
@@ -413,11 +346,12 @@ async function logout(){
   if(S.token)await bp('/logout',{});
   S.token='';S.nick='';S.history=[];
   localStorage.removeItem('vzlom_token');
-  document.getElementById('app').classList.remove('show');
-  document.getElementById('sLogin').classList.remove('hidden');
-  document.getElementById('inNick').value='';document.getElementById('inPass').value='';
-  document.getElementById('errLogin').textContent='';
+  document.getElementById('app').style.opacity='0.3';
+  document.getElementById('app').style.pointerEvents='none';
+  document.getElementById('chat').innerHTML='';
   twStop();sdot('idle');
+  addMsg('Déconnecté — reconnexion en guest...','sys');
+  setTimeout(guestLogin,1500);
 }
 
 // Memory
@@ -464,7 +398,7 @@ function saveCfg(){localStorage.setItem('v2cfg',JSON.stringify({keys:S.keys,mode
 
 // System prompt
 function sysPrompt(mem){
-  return `Tu es Hermès pour Vzlom, assistant IA de ${S.nick||'Emerick'}.
+  return `Tu es Hermès pour Vzlom, assistant IA de ${S.nick||'Guest'}.
 
 STYLE : français, concis, technique, direct, va droit au but.
 
@@ -520,7 +454,7 @@ async function loop(txt,mem,isAuto){
     S.keys[ki].last_used=Date.now();
 
     try{
-      // ⚡ APPEL VIA PROXY — la clé ne quitte jamais le serveur
+      // ⚡ APPEL VIA PROXY — la clé ne quitte jamais le client
       const res=await proxyChat(msgs,model,2000);
       const rdr=res.body.getReader(),dec=new TextDecoder();
       let full='';
@@ -577,7 +511,7 @@ function shouldCont(r){
   if(l.includes('--fix--'))return {why:'auto-correction',msg:'Tu as signalé une erreur. Corrige-la maintenant.'};
   if(l.includes('--continue--'))return {why:'continuation',msg:'Continue. Termine ce que tu faisais.'};
   if(l.includes('--task--'))return {why:'sous-tâche',msg:'Exécute la sous-tâche que tu as créée.'};
-  if(S.auto==='full'&&l.includes('--status--')&&!l.includes('--done--'))return {why:'tâche en cours',msg:'Continue. Tu n\'as pas encore terminé.'};
+  if(S.auto==='full'&&l.includes('--status--')&&!l.includes('--done--'))return {why:'tâche en cours',msg:'Continue. Tu n\\'as pas encore terminé.'};
   return null;
 }
 
@@ -589,7 +523,7 @@ function prs(chunk,full){
 }
 
 function pMark(text,full){
-  const re=/(--status--)\s*([^-]+)--|--bash--\s+([^\n]+)|```(\w*)\n|```|--done--/g;
+  const re=/(--status--)\\s*([^-]+)--|--bash--\\s+([^\\n]+)|```(\\w*)\\n|```|--done--/g;
   let li=0,m;
   while((m=re.exec(text))){
     if(m.index>li)app(text.substring(li,m.index));
@@ -600,7 +534,7 @@ function pMark(text,full){
       bp('/bash?token='+S.token,{command:c}).then(r=>{if(r&&r.output)addMsg(r.output.substring(0,400),'bash')});
     }
     else if(m[0].startsWith('```')&&!inCode){inCode=true;cBuf=''}
-    else if(m[0]==='```'&&inCode){inCode=false;if(cBuf.trim()){addMsg(cBuf,'code');S.history.push({role:'assistant',content:'\n```\n'+cBuf+'\n```'});cBuf=''}}
+    else if(m[0]==='```'&&inCode){inCode=false;if(cBuf.trim()){addMsg(cBuf,'code');S.history.push({role:'assistant',content:'\\n```\\n'+cBuf+'\\n```'});cBuf=''}}
     else if(m[0]==='--done--'){if(!doneShow){doneShow=true;addMsg('✅ Terminé','done')}}
   }
   if(li<text.length)app(text.substring(li));
@@ -641,17 +575,9 @@ document.getElementById('inAuto').addEventListener('change',()=>{
   S.auto=document.getElementById('inAuto').value;saveCfg();
 });
 
-// INIT au chargement
-// Si pas de token, aller directement au login
-const savedToken=localStorage.getItem('vzlom_token');
-if(savedToken){
-  S.token=savedToken;
-  // Tenter de restaurer la session
-  fetch(`${BRIDGE}/auth/check?token=${S.token}`).then(r=>r.json()).then(d=>{
-    if(d&&d.nickname){S.nick=d.nickname;afterLogin()}
-    else{S.token='';localStorage.removeItem('vzlom_token')}
-  }).catch(()=>{S.token='';localStorage.removeItem('vzlom_token')});
-}else{document.getElementById('sLogin').classList.remove('hidden')}
+// INIT — Pas de login, guest direct
+// Restaurer session si token existe, sinon créer guest
+checkToken();
 loadKeys();
 </script>
 </body>
