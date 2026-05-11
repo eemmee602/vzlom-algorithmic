@@ -258,7 +258,6 @@ def send_sse(wfile, data):
         raise ConnectionError("client disconnected")
 
 def _stream_openrouter(resp, wfile):
-    """Read SSE stream from OpenRouter/Groq/Cerebras/Mistral format."""
     full = ""
     buf = ""
     while True:
@@ -282,7 +281,6 @@ def _stream_openrouter(resp, wfile):
     return full
 
 def _stream_gemini(resp, wfile):
-    """Read JSON lines from Gemini API (newline-delimited)."""
     full = ""
     buf = ""
     while True:
@@ -369,7 +367,6 @@ def proxy_chat(self, data):
                     raise HTTPError(f"https://openrouter.ai", resp.status, resp.read().decode()[:200], resp.headers, None)
                 streamer = lambda: _stream_openrouter(resp, self.wfile)
 
-            # Premier provider qui répond → envoyer headers SSE
             if not headers_sent:
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
@@ -411,6 +408,7 @@ def proxy_chat(self, data):
         except: pass
     else:
         self._send_json({"error": f"Aucun provider disponible. Derniere erreur: {last_err[:200]}"}, 429)
+
 
 # ─── HTTP Handler ───
 class BridgeHandler(http.server.BaseHTTPRequestHandler):
@@ -467,7 +465,6 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         qs = parse_qs(parsed.query)
-        token = (qs.get("token") or [None])[0]
 
         if path in ("/", "/index.html", "/mobile.html"):
             self.serve_html(); return
@@ -494,7 +491,8 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             for n, p in PROVIDERS.items():
                 st[n] = {"online": True, "key_set": bool(p["key"])} if p["key"] else {"online": False, "key_set": False}
             self._send_json({"name": "Vzlom Bridge v2.5", "status": "ok", "version": "2.5", "providers": st,
-                              "config": {"default": "openai/gpt-4o-mini", "fallback_order": ["groq", "mistral", "cerebras", "gemini"]}})
+                              "config": {"default": "openai/gpt-4o-mini",
+                                         "fallback_order": ["groq", "mistral", "cerebras", "gemini"]}})
             return
 
         if path == "/api/config":
@@ -504,7 +502,8 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             avail = [n for n, p in PROVIDERS.items() if p["key"]]
             self._send_json({
                 "models": {"default": "openai/gpt-4o-mini",
-                           "fallbacks": ["deepseek/deepseek-chat", "mistralai/mistral-small-2501", "meta-llama/llama-3.3-70b-instruct"]},
+                           "fallbacks": ["deepseek/deepseek-chat", "mistralai/mistral-small-2501",
+                                         "meta-llama/llama-3.3-70b-instruct"]},
                 "providers": prov_obj, "fallback_default": "groq"
             })
             return
@@ -513,37 +512,17 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             r = rotate_key()
             if not r: self._send_json({"error": "Aucune cle API disponible"}, 503); return
             key, prov, kid = r
-            self._send_json({"status": "ok", "provider": prov, "key_masked": key[:8] + "...", "id": kid})
+            self._send_json({"status": "ok", "provider": prov,
+                              "key_masked": key[:8] + "...", "id": kid})
             return
 
-        if path in ("/admin/keys", "/admin/users"):
-            nick = get_user_from_token(token) if token else None
-            if not nick: self._send_json({"error": "Unauthorized"}, 401); return
-
-            if path == "/admin/keys":
-                body = self._parse_body()
-                if self.command == "POST":
-                    rk = (body.get("key") or "").strip()
-                    if len(rk) < 10: self._send_json({"error": "Cle trop courte"}, 400); return
-                    if any(k["key"] == rk for k in ALL_KEYS): self._send_json({"error": "Cle deja existante"}, 409); return
-                    ne = {"id": secrets.token_hex(8), "key": rk, "provider": "openrouter", "source": "manual",
-                           "created": datetime.now().isoformat(), "hits": 0, "last_used": 0}
-                    ALL_KEYS.append(ne)
-                    save_api_keys(ALL_KEYS)
-                    self._send_json({"status": "ok", "id": ne["id"]}); return
-                if self.command == "DELETE":
-                    kid = body.get("id", "")
-                    for i, k in enumerate(ALL_KEYS):
-                        if k["id"] == kid and k["source"] != "env":
-                            ALL_KEYS.pop(i); save_api_keys(ALL_KEYS)
-                            self._send_json({"status": "deleted", "id": kid}); return
-                    self._send_json({"error": "Cle non trouvee"}, 404); return
-
-            if path == "/admin/users":
-                u = load_users()
-                self._send_json({"users": {n: {"created": v.get("created"), "github": bool(v.get("github_token"))}
-                                           for n, v in u.items()}})
-                return
+        if path == "/auth/check":
+            sid = (qs.get("token") or [None])[0]
+            nick = get_user_from_token(sid) if sid else None
+            self._send_json({"status": "ok", "nickname": nick} if nick
+                            else {"error": "Token invalide"},
+                            401 if not nick else 200)
+            return
 
         self._send_json({"error": "Not found"}, 404)
 
@@ -565,29 +544,34 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             users = load_users()
             if nick in users:
                 self._send_json({"error": "Ce surnom existe deja"}, 409); return
-            users[nick] = {"password": hash_password(pwd), "created": datetime.now().isoformat(), "github_token": gh}
+            users[nick] = {"password": hash_password(pwd),
+                           "created": datetime.now().isoformat(), "github_token": gh}
             save_users(users)
-            self._send_json({"status": "ok", "nickname": nick, "token": create_session(nick)}); return
+            self._send_json({"status": "ok", "nickname": nick,
+                              "token": create_session(nick)}); return
 
         if path == "/auth/login":
             nick = (data.get("nickname") or "").strip()
             pwd = (data.get("password") or "").strip()
             user = load_users().get(nick)
-            if not user: self._send_json({"error": "Utilisateur inconnu"}, 401); return
+            if not user:
+                self._send_json({"error": "Utilisateur inconnu"}, 401); return
             if not verify_password(pwd, user["password"]):
                 self._send_json({"error": "Mot de passe incorrect"}, 401); return
-            self._send_json({"status": "ok", "nickname": nick, "token": create_session(nick),
+            self._send_json({"status": "ok", "nickname": nick,
+                              "token": create_session(nick),
                               "github_token": user.get("github_token", "")}); return
 
         if path == "/auth/check":
             nick = get_user_from_token(token)
-            self._send_json({"status": "ok", "nickname": nick} if nick else {"error": "Token invalide"},
-                              401 if not nick else 200); return
+            self._send_json({"status": "ok", "nickname": nick} if nick
+                            else {"error": "Token invalide"},
+                            401 if not nick else 200); return
 
         if path == "/auth/guest":
             nick = "Guest_" + secrets.token_hex(4)
-            token = create_session(nick)
-            self._send_json({"status": "ok", "nickname": nick, "token": token}); return
+            tk = create_session(nick)
+            self._send_json({"status": "ok", "nickname": nick, "token": tk}); return
 
         if path == "/api/chat":
             proxy_chat(self, data); return
@@ -597,17 +581,55 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "Unauthorized"}, 401); return
 
         if path == "/memory":
-            e = add_user_memory_entry(nick, data.get("content", ""), data.get("source", "api"))
-            self._send_json({"status": "saved", "nickname": nick, "entry": e}); return
+            e = add_user_memory_entry(nick, data.get("content", ""),
+                                      data.get("source", "api"))
+            self._send_json({"status": "saved", "nickname": nick,
+                              "entry": e}); return
 
         if path == "/memory/context":
-            self._send_json({"nickname": nick, "context": get_user_memory_context(nick)}); return
+            self._send_json({"nickname": nick,
+                              "context": get_user_memory_context(nick)}); return
 
         if path == "/bash":
             cmd = data.get("command", "")
-            if not cmd: self._send_json({"error": "Commande requise"}, 400); return
+            if not cmd:
+                self._send_json({"error": "Commande requise"}, 400); return
             out, err = run_bash(cmd, nick)
-            self._send_json({"command": cmd, "output": out[:10000], "error": err, "nickname": nick}); return
+            self._send_json({"command": cmd, "output": out[:10000],
+                              "error": err, "nickname": nick}); return
+
+        if path == "/admin/keys":
+            body = data
+            if self.command == "POST":
+                rk = (body.get("key") or "").strip()
+                if len(rk) < 10:
+                    self._send_json({"error": "Cle trop courte"}, 400); return
+                if any(k["key"] == rk for k in ALL_KEYS):
+                    self._send_json({"error": "Cle deja existante"}, 409); return
+                ne = {"id": secrets.token_hex(8), "key": rk,
+                      "provider": "openrouter", "source": "manual",
+                      "created": datetime.now().isoformat(),
+                      "hits": 0, "last_used": 0}
+                ALL_KEYS.append(ne)
+                save_api_keys(ALL_KEYS)
+                self._send_json({"status": "ok",
+                                  "id": ne["id"]}); return
+            if self.command == "DELETE":
+                kid = body.get("id", "")
+                for i, k in enumerate(ALL_KEYS):
+                    if k["id"] == kid and k["source"] != "env":
+                        ALL_KEYS.pop(i)
+                        save_api_keys(ALL_KEYS)
+                        self._send_json({"status": "deleted",
+                                          "id": kid}); return
+                self._send_json({"error": "Cle non trouvee"}, 404); return
+
+        if path == "/admin/users":
+            u = load_users()
+            self._send_json({"users": {n: {"created": v.get("created"),
+                                            "github": bool(v.get("github_token"))}
+                                        for n, v in u.items()}})
+            return
 
         self._send_json({"error": "Not found"}, 404)
 
