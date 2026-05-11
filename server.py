@@ -186,11 +186,18 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
         qs = parse_qs(parsed.query)
-        token = qs.get("token", [""])[0]
+        token = (qs.get("token") or [None])[0]
 
         # Auth check
         user = get_user_from_token(token) if token else None
@@ -198,7 +205,7 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             self._send_json({"error": "Unauthorized"}, 401)
             return
 
-        # API Endpoints
+        # API config (accessible sans auth)
         if path == "/api/config":
             self._send_json({
                 "openrouter_api_key": OPENROUTER_API_KEY,
@@ -219,40 +226,25 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                     logs = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain")
+                self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(logs.encode())
             except FileNotFoundError:
                 self._send_json({"error": "No logs found"}, 404)
             return
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
-        self.end_headers()
-
-    def _parse_body(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length) if length > 0 else b"{}"
-        try:
-            return json.loads(body)
-        except:
-            return {}
-
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
-        params = parse_qs(parsed.query)
-        token = (params.get("token") or [None])[0]
-
-        if path == "/":
+        # ── Routes standard ──
+        if path == "/" or path == "/health":
             self._send_json({
                 "name": "Vzlom Bridge v2.0",
+                "status": "ok",
+                "version": "2.0",
                 "endpoints": {
                     "POST /auth/register": "Créer un compte",
                     "POST /auth/login": "Se connecter",
                     "GET /health": "Test connexion",
+                    "GET /api/config": "Config API (sans auth)",
+                    "GET /api/logs?token=X": "Voir logs (auth)",
                     "GET /memory?token=X": "Voir mémoire (auth)",
                     "POST /memory": "Ajouter mémoire (auth)",
                     "POST /bash": "Exécuter bash (auth)",
@@ -260,17 +252,9 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                     "POST /tasks": "Ajouter une tâche (auth)",
                 }
             })
-        
-        elif path == "/health":
-            user_count = len(load_users())
-            session_count = len(SESSIONS)
-            self._send_json({
-                "status": "ok", "version": "2.0",
-                "users": user_count, "sessions": session_count,
-                "time": datetime.now().isoformat()
-            })
+            return
 
-        elif path == "/memory":
+        if path == "/memory":
             nickname = get_user_from_token(token)
             if not nickname:
                 self._send_json({"error": "Token invalide ou expiré. Re-login."}, 401)
@@ -282,8 +266,9 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 "count": len(data["entries"]),
                 "entries": recent
             })
+            return
 
-        elif path == "/tasks":
+        if path == "/tasks":
             nickname = get_user_from_token(token)
             if not nickname:
                 self._send_json({"error": "Token invalide"}, 401)
@@ -294,9 +279,9 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 "count": len(data["tasks"]),
                 "tasks": data["tasks"]
             })
+            return
 
-        else:
-            self._send_json({"error": "Not found"}, 404)
+        self._send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
         parsed = urlparse(self.path)
