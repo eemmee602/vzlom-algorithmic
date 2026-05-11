@@ -180,7 +180,10 @@ meta-llama/llama-3.2-3b-instruct</textarea>
 })();
 
 // State
-const BRIDGE='http://localhost:3456',API='https://openrouter.ai/api/v1/chat/completions';
+// Auto-detect bridge URL from current page host
+let _host = window.location.hostname;
+const BRIDGE = 'http://' + _host + ':3456';
+let API='https://openrouter.ai/api/v1/chat/completions';
 let S={token:'',nick:'',keys:[],model:'google/gemini-2.0-flash-lite',falls:['deepseek/deepseek-chat','mistralai/mistral-small-2501','meta-llama/llama-3.2-3b-instruct'],auto:'smart',history:[],ki:0,busy:false,iters:0,maxIters:5};
 
 // ─── Config loader ───
