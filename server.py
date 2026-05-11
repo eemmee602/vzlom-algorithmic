@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """
 Vzlom Bridge v2.5 — Single server, single port (3456).
-Multi-proxy LLM routing (OpenRouter → Gemini → Groq → Cerebras → Mistral → Cohere).
-Clés API JAMAIS exposées au client. Rotation automatique.
+Multi-proxy LLM routing avec fallback automatique.
+Cles API JAMAIS exposees au client.
 """
-import http.server, json, subprocess, os, hashlib, uuid, secrets, time, mimetypes
+import http.server, json, subprocess, os, hashlib, uuid, secrets, time, ssl
 from urllib.parse import urlparse, parse_qs
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from datetime import datetime
-import importlib, sys, http.client, ssl
+from http.client import HTTPSConnection
+import sys
 from dotenv import load_dotenv
 
 # ─── Config ───
@@ -20,21 +21,15 @@ WORKSPACE = os.path.join(BASE_DIR, "workspace")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 KEYS_FILE = os.path.join(DATA_DIR, "keys.json")
 SESSIONS = {}
+TIMEOUT = 15  # secondes par provider
 
 load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 # ─── Provider configs ───
-# model_map: traduit le modele client "prefix/name" → nom natif du provider
 PROVIDERS = {
     "openrouter": {
         "base": "https://openrouter.ai/api/v1/chat/completions",
         "key": os.getenv("OPENROUTER_API_KEY", ""),
-        "headers": lambda k: {
-            "Authorization": f"Bearer {k}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/eemmee602/vzlom-algorithmic",
-            "X-Title": "Vzlom Mobile",
-        },
         "model_map": {
             "openai/gpt-4o-mini": "openai/gpt-4o-mini",
             "deepseek/deepseek-chat": "deepseek/deepseek-chat",
@@ -44,9 +39,8 @@ PROVIDERS = {
         },
     },
     "gemini": {
-        "base": "https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent",
+        "base": "generativelanguage.googleapis.com",
         "key": os.getenv("GEMINI_API_KEY", ""),
-        "headers": lambda k: {"Content-Type": "application/json"},
         "model_map": {
             "openai/gpt-4o-mini": "gemini-1.5-flash",
             "deepseek/deepseek-chat": "gemini-1.5-flash",
@@ -56,9 +50,8 @@ PROVIDERS = {
         },
     },
     "groq": {
-        "base": "https://api.groq.com/openai/v1/chat/completions",
+        "base": "api.groq.com",
         "key": os.getenv("GROQ_API_KEY", ""),
-        "headers": lambda k: {"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
         "model_map": {
             "openai/gpt-4o-mini": "llama-3.3-70b-versatile",
             "deepseek/deepseek-chat": "llama-3.1-70b-versatile",
@@ -68,9 +61,8 @@ PROVIDERS = {
         },
     },
     "cerebras": {
-        "base": "https://api.cerebras.ai/v1/chat/completions",
+        "base": "api.cerebras.ai",
         "key": os.getenv("CEREBRAS_API_KEY", ""),
-        "headers": lambda k: {"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
         "model_map": {
             "openai/gpt-4o-mini": "llama3.1-8b",
             "deepseek/deepseek-chat": "llama3.1-8b",
@@ -80,27 +72,14 @@ PROVIDERS = {
         },
     },
     "mistral": {
-        "base": "https://api.mistral.ai/v1/chat/completions",
+        "base": "api.mistral.ai",
         "key": os.getenv("MISTRAL_API_KEY", ""),
-        "headers": lambda k: {"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
         "model_map": {
             "openai/gpt-4o-mini": "mistral-small-latest",
             "deepseek/deepseek-chat": "mistral-small-latest",
             "google/gemini-2.0-flash": "mistral-small-latest",
             "mistralai/mistral-small-2501": "mistral-small-latest",
             "meta-llama/llama-3.3-70b-instruct": "mistral-large-latest",
-        },
-    },
-    "cohere": {
-        "base": "https://api.cohere.ai/v1/chat",
-        "key": os.getenv("COHERE_API_KEY", ""),
-        "headers": lambda k: {"Authorization": f"Bearer {k}", "Content-Type": "application/json"},
-"model_map": {
-            "openai/gpt-4o-mini": "command-r-plus",
-            "deepseek/deepseek-chat": "command-r-plus",
-            "google/gemini-2.0-flash": "command-r-plus",
-            "mistralai/mistral-small-2501": "command-r",
-            "meta-llama/llama-3.3-70b-instruct": "command-r-plus",
         },
     },
 }
@@ -117,29 +96,18 @@ def load_all_api_keys():
     for prov_name, prov in PROVIDERS.items():
         k = prov["key"]
         if k:
-            keys.append({
-                "id": f"{prov_name}_{k[:8]}",
-                "key": k,
-                "provider": prov_name,
-                "source": "env",
-                "created": "env",
-                "hits": 0,
-                "last_used": 0,
-            })
+            keys.append({"id": f"{prov_name}_{k[:8]}", "key": k, "provider": prov_name,
+                          "source": "env", "created": "env", "hits": 0, "last_used": 0})
     try:
         with open(KEYS_FILE) as f:
-            data = json.load(f)
-            for entry in data.get("keys", []):
+            for entry in json.load(f).get("keys", []):
                 if entry.get("key"):
-                    keys.append({
-                        "id": entry.get("id", secrets.token_hex(8)),
-                        "key": entry["key"],
-                        "provider": entry.get("provider", "openrouter"),
-                        "source": entry.get("source", "file"),
-                        "created": entry.get("created", "unknown"),
-                        "hits": entry.get("hits", 0),
-                        "last_used": entry.get("last_used", 0),
-                    })
+                    keys.append({"id": entry.get("id", secrets.token_hex(8)), "key": entry["key"],
+                                  "provider": entry.get("provider", "openrouter"),
+                                  "source": entry.get("source", "file"),
+                                  "created": entry.get("created", "unknown"),
+                                  "hits": entry.get("hits", 0),
+                                  "last_used": entry.get("last_used", 0)})
     except FileNotFoundError:
         pass
     except Exception as e:
@@ -148,10 +116,8 @@ def load_all_api_keys():
 
 def save_api_keys(keys):
     try:
-        data_keys = [
-            {k: v for k, v in entry.items() if k != "key"} | {"key_exists": True}
-            for entry in keys if entry["source"] != "env"
-        ]
+        data_keys = [{k: v for k, v in e.items() if k != "key"} | {"key_exists": True}
+                      for e in keys if e["source"] != "env"]
         with open(KEYS_FILE, "w") as f:
             json.dump({"keys": data_keys, "updated": datetime.now().isoformat()}, f, indent=2, ensure_ascii=False)
     except Exception as e:
@@ -159,7 +125,7 @@ def save_api_keys(keys):
 
 ALL_KEYS = load_all_api_keys()
 if not ALL_KEYS:
-    print("[WARN] Aucune clé API trouvée !")
+    print("[WARN] Aucune cle API trouvee !")
 if not os.path.exists(KEYS_FILE):
     save_api_keys(ALL_KEYS)
 
@@ -175,13 +141,13 @@ def load_users():
 def save_users(users):
     with open(USERS_FILE, "w") as f: json.dump(users, f, indent=2)
 
-def hash_password(password, salt=None):
+def hash_password(pwd, salt=None):
     if salt is None: salt = secrets.token_hex(8)
-    return f"{salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
+    return f"{salt}${hashlib.sha256((salt + pwd).encode()).hexdigest()}"
 
-def verify_password(password, stored):
+def verify_password(pwd, stored):
     salt, h = stored.split("$", 1)
-    return hash_password(password, salt) == stored
+    return hash_password(pwd, salt) == stored
 
 def create_session(nickname):
     token = "vzlom_" + secrets.token_hex(24)
@@ -189,83 +155,77 @@ def create_session(nickname):
     return token
 
 def get_user_from_token(token):
-    session = SESSIONS.get(token)
-    if not session: return None
-    if time.time() - session["created"] > 86400:
+    s = SESSIONS.get(token)
+    if not s: return None
+    if time.time() - s["created"] > 86400:
         del SESSIONS[token]
         return None
-    return session["nickname"]
+    return s["nickname"]
 
-# ─── User memory ───
-def get_user_memory_file(nickname): return os.path.join(DATA_DIR, f"memory_{nickname}.json")
+def get_user_memory_file(n): return os.path.join(DATA_DIR, f"memory_{n}.json")
 
-def load_user_memory(nickname):
-    path = get_user_memory_file(nickname)
+def load_user_memory(n):
     try:
-        with open(path) as f: return json.load(f)
-    except: return {"nickname": nickname, "entries": []}
+        with open(get_user_memory_file(n)) as f: return json.load(f)
+    except: return {"nickname": n, "entries": []}
 
-def save_user_memory(nickname, data):
-    with open(get_user_memory_file(nickname), "w") as f: json.dump(data, f, indent=2)
+def save_user_memory(n, data):
+    with open(get_user_memory_file(n), "w") as f: json.dump(data, f, indent=2)
 
-def add_user_memory_entry(nickname, content, source="user"):
-    data = load_user_memory(nickname)
-    data["entries"].append({"content": content[:2000], "source": source, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+def add_user_memory_entry(n, content, src="user"):
+    data = load_user_memory(n)
+    data["entries"].append({"content": content[:2000], "source": src,
+                             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
     if len(data["entries"]) > 10000: data["entries"] = data["entries"][-10000:]
-    save_user_memory(nickname, data)
+    save_user_memory(n, data)
     return data["entries"][-1]
 
-def get_user_memory_context(nickname, recent=30):
-    data = load_user_memory(nickname)
+def get_user_memory_context(n, recent=30):
+    data = load_user_memory(n)
     entries = data["entries"][-recent:]
-    if not entries: return "Aucune mémoire."
-    return "\n".join(f"[{e['timestamp']}] {e['source']}: {e['content'][:200] if len(e['content']) > 200 else e['content']}" for e in entries)
+    if not entries: return "Aucune memoire."
+    return "\n".join(f"[{e['timestamp']}] {e['source']}: {e['content'][:200] if len(e['content'])>200 else e['content']}" for e in entries)
 
-# ─── Workspace ───
-def get_user_workspace(nickname):
-    path = os.path.join(WORKSPACE, nickname)
-    os.makedirs(path, exist_ok=True)
-    return path
+def get_user_workspace(n):
+    p = os.path.join(WORKSPACE, n)
+    os.makedirs(p, exist_ok=True)
+    return p
 
-def get_user_github_token(nickname):
-    user = load_users().get(nickname, {})
-    return user.get("github_token") or user.get("github")
+def get_user_github_token(n):
+    u = load_users().get(n, {})
+    return u.get("github_token") or u.get("github")
 
-# ─── Bash ───
 BLACKLIST = ["rm -rf /", "sudo", "mkfs", "dd if=", "> /dev/sd", ":(){ :|:& };:"]
 
-def run_bash(command, nickname):
+def run_bash(cmd, nick):
     for d in BLACKLIST:
-        if d in command.lower(): return f"BLOCKED: Commande interdite ({d})", True
-    cwd = get_user_workspace(nickname)
+        if d in cmd.lower(): return f"BLOCKED: Commande interdite ({d})", True
+    cwd = get_user_workspace(nick)
     try:
-        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30, cwd=cwd,
-                           env={**os.environ, "PATH": "/usr/local/bin:/usr/bin:/bin", "VZLOM_USER": nickname})
+        r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=cwd,
+                           env={**os.environ, "PATH": "/usr/local/bin:/usr/bin:/bin", "VZLOM_USER": nick})
         out = r.stdout + ("\n[STDERR]\n" + r.stderr if r.stderr else "")
         return out, (r.returncode != 0)
     except subprocess.TimeoutExpired: return "TIMEOUT: 30s", True
     except Exception as e: return f"ERROR: {e}", True
 
-# ─── Tasks ───
-def get_user_task_file(nickname): return os.path.join(DATA_DIR, f"tasks_{nickname}.json")
+def get_user_task_file(n): return os.path.join(DATA_DIR, f"tasks_{n}.json")
 
-def load_user_tasks(nickname):
-    path = get_user_task_file(nickname)
+def load_user_tasks(n):
     try:
-        with open(path) as f: return json.load(f)
+        with open(get_user_task_file(n)) as f: return json.load(f)
     except: return {"tasks": []}
 
-def save_user_tasks(nickname, data):
-    with open(get_user_task_file(nickname), "w") as f: json.dump(data, f, indent=2)
+def save_user_tasks(n, data):
+    with open(get_user_task_file(n), "w") as f: json.dump(data, f, indent=2)
 
-def add_user_task(nickname, task):
-    data = load_user_tasks(nickname)
+def add_user_task(n, task):
+    data = load_user_tasks(n)
     data["tasks"].append({"id": str(uuid.uuid4())[:8], "task": task[:500], "status": "pending",
-                          "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "result": ""})
-    save_user_tasks(nickname, data)
+                           "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "result": ""})
+    save_user_tasks(n, data)
     return data["tasks"][-1]
 
-# ─── Key rotation ───
 def rotate_key():
     keys = load_all_api_keys()
     if not keys: return None
@@ -276,15 +236,6 @@ def rotate_key():
     save_api_keys(keys)
     return chosen["key"], chosen["provider"], chosen["id"]
 
-def rotate_key_handler(self):
-    result = rotate_key()
-    if not result:
-        self._send_json({"error": "Aucune clé API disponible"}, 503)
-        return
-    key, prov, kid = result
-    self._send_json({"status": "ok", "provider": prov, "key_masked": key[:8] + "••••" + key[-4:] if len(key) > 12 else "****"})
-
-# ─── Resolve provider from client model prefix ───
 def resolve_provider(model_id):
     if model_id.startswith("google/"): return "gemini"
     if model_id.startswith("deepseek/"): return "openrouter"
@@ -293,147 +244,175 @@ def resolve_provider(model_id):
     if model_id.startswith("openai/"): return "openrouter"
     return "openrouter"
 
-# ─── Map client model → provider native model ───
-def map_model(prov_name, client_model):
-    prov = PROVIDERS.get(prov_name)
-    if not prov: return client_model
-    return prov["model_map"].get(client_model, client_model)
+def map_model(pname, cmodel):
+    prov = PROVIDERS.get(pname)
+    if not prov: return cmodel
+    return prov["model_map"].get(cmodel, cmodel)
 
-# ─── Proxy calls ───
-def call_openrouter_api(prov_name, api_key, model, msgs, max_tokens):
-    """Appel OpenAI-compatible (OpenRouter, Groq, Cerebras, Mistral)."""
-    prov = PROVIDERS[prov_name]
-    payload = json.dumps({"model": model, "messages": msgs, "stream": True, "max_tokens": max_tokens}).encode()
-    url = prov["base"]
-    req = Request(url, data=payload, headers=prov["headers"](api_key), method="POST")
-    return urlopen(req, timeout=120)
+# ─── Streaming SSE helpers ───
+def send_sse(wfile, data):
+    try:
+        wfile.write(f"data: {json.dumps(data, ensure_ascii=False)}\n\n".encode())
+        wfile.flush()
+    except (BrokenPipeError, ConnectionResetError, OSError):
+        raise ConnectionError("client disconnected")
 
-def call_gemini_api(api_key, model, msgs, max_tokens):
-    """Appel Gemini API directe."""
-    transformed = {
-        "contents": [_gemini_msg(m) for m in msgs],
-        "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7},
-    }
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:streamGenerateContent?key={api_key}"
-    payload = json.dumps(transformed).encode()
-    req = Request(url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
-    return urlopen(req, timeout=120)
+def _stream_openrouter(resp, wfile):
+    """Read SSE stream from OpenRouter/Groq/Cerebras/Mistral format."""
+    full = ""
+    buf = ""
+    while True:
+        chunk = resp.read(1)
+        if not chunk: break
+        buf += chunk.decode("utf-8", errors="replace")
+        while "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            line = line.strip()
+            if not line: continue
+            if line == "data: [DONE]":
+                send_sse(wfile, {"done": True})
+                return full
+            if line.startswith("data: "):
+                try:
+                    d = json.loads(line[6:])
+                    full += d.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                    send_sse(wfile, d)
+                except (json.JSONDecodeError, IndexError):
+                    pass
+    return full
 
-def call_cohere_api(api_key, model, msgs, max_tokens):
-    """Appel Cohere API (format légèrement différent)."""
-    cohere_msgs = []
-    for m in msgs:
-        role = m.get("role", "user")
-        if role == "system": role = "system"
-        elif role == "assistant": role = "assistant"
-        else: role = "user"
-        cohere_msgs.append({"role": role, "message": m.get("content", "")})
-    payload = json.dumps({"model": model, "message": cohere_msgs[-1]["message"], "chat_history": cohere_msgs[:-1], "max_tokens": max_tokens, "stream": True}).encode()
-    req = Request(f"{PROVIDERS['cohere']['base']}?model={model}", data=payload, headers=PROVIDERS["cohere"]["headers"](api_key), method="POST")
-    return urlopen(req, timeout=120)
+def _stream_gemini(resp, wfile):
+    """Read JSON lines from Gemini API (newline-delimited)."""
+    full = ""
+    buf = ""
+    while True:
+        chunk = resp.read(1)
+        if not chunk: break
+        buf += chunk.decode("utf-8", errors="replace")
+        while "\n" in buf:
+            line, buf = buf.split("\n", 1)
+            line = line.strip()
+            if not line: continue
+            try:
+                j = json.loads(line)
+                parts = j.get("candidates", [{}])
+                if not parts: continue
+                text = parts[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                finish = parts[0].get("finishReason", "")
+                if text:
+                    full += text
+                    send_sse(wfile, {"choices": [{"delta": {"content": text}}]})
+                if finish:
+                    send_sse(wfile, {"choices": [{"delta": {}, "finish_reason": finish}]})
+                    return full
+            except (json.JSONDecodeError, (IndexError, KeyError)):
+                continue
+    return full
 
+# ─── Proxy chat ───
 def proxy_chat(self, data):
-    """Routeur principal : essaie les providers dans l'ordre, fallback automatique."""
     model = data.get("model", "openai/gpt-4o-mini")
     msgs = data.get("messages", [])
     max_tokens = data.get("max_tokens", 2048)
 
-    target_provider = resolve_provider(model)
-    # Ordre : cible → openrouter → gemini → groq → cerebras → mistral → cohere
-    ordered = ["openrouter", "gemini", "groq", "cerebras", "mistral", "cohere"]
-    providers_order = list(dict.fromkeys([target_provider] + ordered))
+    target = resolve_provider(model)
+    ordered = ["openrouter", "gemini", "groq", "cerebras", "mistral"]
+    providers_order = list(dict.fromkeys([target] + ordered))
 
     last_err = ""
-    for prov_name in providers_order:
-        prov = PROVIDERS.get(prov_name)
+    headers_sent = False
+
+    for pname in providers_order:
+        prov = PROVIDERS.get(pname)
         if not prov or not prov["key"]:
             continue
 
         try:
-            native_model = map_model(prov_name, model)
+            native = map_model(pname, model)
+            print(f"[PROXY] Trying {pname}/{native}...")
 
-            if prov_name == "gemini":
-                resp = call_gemini_api(prov["key"], native_model, msgs, max_tokens)
-            elif prov_name == "cohere":
-                resp = call_cohere_api(prov["key"], native_model, msgs, max_tokens)
+            if pname == "gemini":
+                payload = json.dumps({
+                    "contents": [_gemini_msg(m) for m in msgs],
+                    "generationConfig": {"maxOutputTokens": max_tokens, "temperature": 0.7}
+                }).encode()
+                conn = HTTPSConnection("generativelanguage.googleapis.com", timeout=TIMEOUT)
+                conn.request("POST", f"/v1beta/models/{native}:streamGenerateContent?key={prov['key']}",
+                             body=payload, headers={"Content-Type": "application/json"})
+                resp = conn.getresponse()
+                if resp.status != 200:
+                    raise HTTPError(f"https://generativelanguage.googleapis.com", resp.status, resp.read().decode()[:200], resp.headers, None)
+                streamer = lambda: _stream_gemini(resp, self.wfile)
             else:
-                resp = call_openrouter_api(prov_name, prov["key"], native_model, msgs, max_tokens)
+                payload = json.dumps({"model": native, "messages": msgs, "stream": True, "max_tokens": max_tokens}).encode()
+                if pname == "groq":
+                    conn = HTTPSConnection("api.groq.com", timeout=TIMEOUT)
+                    conn.request("POST", "/openai/v1/chat/completions", body=payload,
+                                 headers={"Authorization": f"Bearer {prov['key']}", "Content-Type": "application/json"})
+                elif pname == "cerebras":
+                    conn = HTTPSConnection("api.cerebras.ai", timeout=TIMEOUT)
+                    conn.request("POST", "/v1/chat/completions", body=payload,
+                                 headers={"Authorization": f"Bearer {prov['key']}", "Content-Type": "application/json"})
+                elif pname == "mistral":
+                    conn = HTTPSConnection("api.mistral.ai", timeout=TIMEOUT)
+                    conn.request("POST", "/v1/chat/completions", body=payload,
+                                 headers={"Authorization": f"Bearer {prov['key']}", "Content-Type": "application/json"})
+                else:  # openrouter
+                    conn = HTTPSConnection("openrouter.ai", timeout=TIMEOUT)
+                    conn.request("POST", "/api/v1/chat/completions", body=payload,
+                                 headers={"Authorization": f"Bearer {prov['key']}",
+                                          "Content-Type": "application/json",
+                                          "HTTP-Referer": "https://github.com/eemmee602/vzlom-algorithmic",
+                                          "X-Title": "Vzlom Mobile"})
+                resp = conn.getresponse()
+                if resp.status != 200:
+                    raise HTTPError(f"https://openrouter.ai", resp.status, resp.read().decode()[:200], resp.headers, None)
+                streamer = lambda: _stream_openrouter(resp, self.wfile)
 
-            # Succès → stream SSE au client
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.send_header("Cache-Control", "no-cache")
-            self.send_header("X-Provider", prov_name)
-            self.send_header("X-Model", native_model)
-            self._no_cache()
-            self._cors()
-            self.end_headers()
+            # Premier provider qui répond → envoyer headers SSE
+            if not headers_sent:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.send_header("Cache-Control", "no-cache")
+                self.send_header("X-Provider", pname)
+                self.send_header("X-Model", native)
+                self._no_cache()
+                self._cors()
+                self.end_headers()
+                headers_sent = True
 
-            is_gemini = (prov_name == "gemini")
-            is_cohere = (prov_name == "cohere")
-
-            for line in resp.iter_lines():
-                if line:
-                    decoded = line.decode("utf-8")
-                    if is_gemini:
-                        try:
-                            j = json.loads(decoded)
-                            text = j.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-                            finish = j.get("candidates", [{}])[0].get("finishReason", "")
-                        except (IndexError, KeyError):
-                            text = ""
-                            finish = ""
-                        if text:
-                            self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': text}}]})}\n\n".encode())
-                        if finish:
-                            self.wfile.write(b"data: [DONE]\n\n")
-                            break
-                    elif is_cohere:
-                        try:
-                            j = json.loads(decoded)
-                            text = j.get("text", "")
-                            is_final = j.get("is_finished", False)
-                        except (json.JSONDecodeError, KeyError):
-                            text = ""
-                            is_final = False
-                        if text:
-                            self.wfile.write(f"data: {json.dumps({'choices': [{'delta': {'content': text}}]})}\n\n".encode())
-                        if is_final:
-                            self.wfile.write(b"data: [DONE]\n\n")
-                            break
-                    else:
-                        if decoded.strip() == "data: [DONE]":
-                            self.wfile.write(b"data: [DONE]\n\n")
-                            break
-                        try:
-                            d = json.loads(decoded.replace("data: ", ""))
-                            if d.get("choices", [{}])[0].get("finish_reason"):
-                                self.wfile.write(b"data: [DONE]\n\n")
-                                break
-                        except (json.JSONDecodeError, IndexError):
-                            pass
-                        self.wfile.write((decoded + "\n").encode())
-                    try:
-                        self.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        break
+            streamer()
+            conn.close()
+            print(f"[PROXY] {pname} completed")
             return
 
         except HTTPError as e:
-            body = e.read().decode()[:300]
-            last_err = f"[{prov_name}] HTTP {e.code}: {body[:100]}"
-            if e.code == 429:
-                last_err += " (rate limit)"
-            print(f"[PROXY] {prov_name} failed: {last_err}")
+            body = ""
+            try:
+                body = e.read().decode()[:300]
+            except: pass
+            last_err = f"[{pname}] HTTP {e.code}: {body[:100]}"
+            if e.code == 429: last_err += " (rate limit)"
+            print(f"[PROXY] {pname} failed: {last_err}")
+            if not headers_sent:
+                try: conn.close()
+                except: pass
         except Exception as e:
-            last_err = f"[{prov_name}] {str(e)[:120]}"
-            print(f"[PROXY] {prov_name} error: {last_err}")
-            continue
+            last_err = f"[{pname}] {str(e)[:120]}"
+            print(f"[PROXY] {pname} error: {last_err}")
+            if not headers_sent:
+                try: conn.close()
+                except: pass
 
-    print(f"[PROXY] All providers failed. Last error: {last_err}")
-    self._send_json({"error": f"Aucun provider disponible. Dernière erreur: {last_err[:200]}"}, 429)
+    print(f"[PROXY] All providers failed: {last_err}")
+    if headers_sent:
+        try:
+            send_sse(wfile, {"error": "Aucun provider disponible"})
+        except: pass
+    else:
+        self._send_json({"error": f"Aucun provider disponible. Derniere erreur: {last_err[:200]}"}, 429)
 
-# ─── Handler HTTP ───
+# ─── HTTP Handler ───
 class BridgeHandler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"
     log_message = lambda self, fmt, *args: None
@@ -465,15 +444,13 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
     def _parse_body(self):
         length = int(self.headers.get("Content-Length", 0))
         if length == 0: return {}
-        raw = self.rfile.read(length).decode("utf-8")
-        try: return json.loads(raw)
-        except json.JSONDecodeError: return {}
+        try: return json.loads(self.rfile.read(length).decode("utf-8"))
+        except: return {}
 
     def serve_html(self, filename="mobile_index.html"):
         filepath = os.path.join(BASE_DIR, filename)
         if not os.path.exists(filepath):
-            self.send_error(404, "HTML not found")
-            return
+            self.send_error(404, "HTML not found"); return
         try:
             with open(filepath, "rb") as f:
                 content = f.read()
@@ -486,7 +463,6 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self.send_error(500, str(e))
 
-    # ── GET ──
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -494,126 +470,80 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         token = (qs.get("token") or [None])[0]
 
         if path in ("/", "/index.html", "/mobile.html"):
-            self.serve_html("mobile_index.html")
-            return
+            self.serve_html(); return
 
         if path == "/favicon.ico":
-            favicon_path = os.path.join(BASE_DIR, "favicon.ico")
-            if os.path.exists(favicon_path):
-                with open(favicon_path, "rb") as f:
-                    content = f.read()
+            fp = os.path.join(BASE_DIR, "favicon.ico")
+            if os.path.exists(fp):
+                with open(fp, "rb") as f:
+                    c = f.read()
                 self.send_response(200)
                 self.send_header("Content-Type", "image/x-icon")
-                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Content-Length", str(len(c)))
                 self.end_headers()
-                self.wfile.write(content)
+                self.wfile.write(c)
             else:
-                self.send_response(204)
-                self.end_headers()
+                self.send_response(204); self.end_headers()
             return
 
-        # ── API publiques ──
         if path == "/health":
-            prov_status = {}
-            for name, p in PROVIDERS.items():
-                if p["key"]:
-                    prov_status[name] = {"key_set": True, "masked": p["key"][:8] + "••••"}
-                else:
-                    prov_status[name] = {"key_set": False}
-            self._send_json({
-                "name": "Vzlom Bridge v2.5",
-                "status": "ok",
-                "version": "2.5",
-                "providers": prov_status
-            })
+            st = {}
+            for n, p in PROVIDERS.items():
+                st[n] = {"online": True, "key_set": bool(p["key"])} if p["key"] else {"online": False, "key_set": False}
+            self._send_json({"name": "Vzlom Bridge v2.5", "status": "ok", "version": "2.5", "providers": st,
+                              "config": {"default": "openai/gpt-4o-mini", "fallback_order": ["groq", "mistral", "cerebras", "gemini"]}})
             return
 
         if path == "/api/config":
-            available = []
-            for name, p in PROVIDERS.items():
-                if p["key"]:
-                    available.append(name)
+            prov_obj = {}
+            for n, p in PROVIDERS.items():
+                prov_obj[n] = {"online": True, "key_set": bool(p["key"])}
+            avail = [n for n, p in PROVIDERS.items() if p["key"]]
             self._send_json({
-                "models": {
-                    "default": "openai/gpt-4o-mini",
-                    "fallbacks": [
-                        "deepseek/deepseek-chat",
-                        "mistralai/mistral-small-2501",
-                        "meta-llama/llama-3.3-70b-instruct"
-                    ],
-                },
-                "providers": available,
-                "fallback_default": "groq",
+                "models": {"default": "openai/gpt-4o-mini",
+                           "fallbacks": ["deepseek/deepseek-chat", "mistralai/mistral-small-2501", "meta-llama/llama-3.3-70b-instruct"]},
+                "providers": prov_obj, "fallback_default": "groq"
             })
             return
 
         if path == "/api/keys/next":
-            result = rotate_key()
-            if not result:
-                self._send_json({"error": "Aucune clé API disponible"}, 503)
-                return
-            key, prov, kid = result
-            self._send_json({
-                "status": "ok",
-                "provider": prov,
-                "key_masked": key[:8] + "••••" + key[-4:] if len(key) > 12 else "****",
-                "id": kid
-            })
+            r = rotate_key()
+            if not r: self._send_json({"error": "Aucune cle API disponible"}, 503); return
+            key, prov, kid = r
+            self._send_json({"status": "ok", "provider": prov, "key_masked": key[:8] + "...", "id": kid})
             return
 
-        # ── Admin (protégé) ──
         if path in ("/admin/keys", "/admin/users"):
-            nickname = get_user_from_token(token) if token else None
-            if not nickname:
-                self._send_json({"error": "Unauthorized"}, 401)
-                return
+            nick = get_user_from_token(token) if token else None
+            if not nick: self._send_json({"error": "Unauthorized"}, 401); return
 
             if path == "/admin/keys":
                 body = self._parse_body()
                 if self.command == "POST":
-                    raw_key = (body.get("key") or "").strip()
-                    if len(raw_key) < 10:
-                        self._send_json({"error": "Clé trop courte"}, 400)
-                        return
-                    if any(k["key"] == raw_key for k in ALL_KEYS):
-                        self._send_json({"error": "Clé déjà existante"}, 409)
-                        return
-                    new_entry = {
-                        "id": secrets.token_hex(8),
-                        "key": raw_key,
-                        "provider": "openrouter",
-                        "source": "manual",
-                        "created": datetime.now().isoformat(),
-                        "hits": 0,
-                        "last_used": 0,
-                    }
-                    ALL_KEYS.append(new_entry)
+                    rk = (body.get("key") or "").strip()
+                    if len(rk) < 10: self._send_json({"error": "Cle trop courte"}, 400); return
+                    if any(k["key"] == rk for k in ALL_KEYS): self._send_json({"error": "Cle deja existante"}, 409); return
+                    ne = {"id": secrets.token_hex(8), "key": rk, "provider": "openrouter", "source": "manual",
+                           "created": datetime.now().isoformat(), "hits": 0, "last_used": 0}
+                    ALL_KEYS.append(ne)
                     save_api_keys(ALL_KEYS)
-                    self._send_json({"status": "ok", "id": new_entry["id"]})
-                    return
-
+                    self._send_json({"status": "ok", "id": ne["id"]}); return
                 if self.command == "DELETE":
-                    kid = (body.get("id") or "")
+                    kid = body.get("id", "")
                     for i, k in enumerate(ALL_KEYS):
                         if k["id"] == kid and k["source"] != "env":
-                            ALL_KEYS.pop(i)
-                            save_api_keys(ALL_KEYS)
-                            self._send_json({"status": "deleted", "id": kid})
-                            return
-                    self._send_json({"error": "Clé non trouvée"}, 404)
-                    return
+                            ALL_KEYS.pop(i); save_api_keys(ALL_KEYS)
+                            self._send_json({"status": "deleted", "id": kid}); return
+                    self._send_json({"error": "Cle non trouvee"}, 404); return
 
             if path == "/admin/users":
-                users = load_users()
-                safe = {n: {"created": u.get("created"), "github": bool(u.get("github_token"))}
-                        for n, u in users.items()}
-                self._send_json({"users": safe})
+                u = load_users()
+                self._send_json({"users": {n: {"created": v.get("created"), "github": bool(v.get("github_token"))}
+                                           for n, v in u.items()}})
                 return
 
-        # Requête inconnue
         self._send_json({"error": "Not found"}, 404)
 
-    # ── POST ──
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -622,93 +552,64 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         data = self._parse_body()
 
         if path == "/auth/register":
-            nickname = (data.get("nickname") or "").strip()
-            password = (data.get("password") or "").strip()
-            github_token = (data.get("github_token") or "").strip()
-            if len(nickname) < 2 or len(password) < 2:
-                self._send_json({"error": "Surnom (2+) et mot de passe (2+) requis"}, 400)
-                return
-            if nickname in ("admin", "root"):
-                self._send_json({"error": "Ce surnom est réservé"}, 400)
-                return
+            nick = (data.get("nickname") or "").strip()
+            pwd = (data.get("password") or "").strip()
+            gh = (data.get("github_token") or "").strip()
+            if len(nick) < 2 or len(pwd) < 2:
+                self._send_json({"error": "Surnom (2+) et mot de passe (2+) requis"}, 400); return
+            if nick in ("admin", "root"):
+                self._send_json({"error": "Ce surnom est reserve"}, 400); return
             users = load_users()
-            if nickname in users:
-                self._send_json({"error": "Ce surnom existe déjà"}, 409)
-                return
-            users[nickname] = {
-                "password": hash_password(password),
-                "created": datetime.now().isoformat(),
-                "github_token": github_token
-            }
+            if nick in users:
+                self._send_json({"error": "Ce surnom existe deja"}, 409); return
+            users[nick] = {"password": hash_password(pwd), "created": datetime.now().isoformat(), "github_token": gh}
             save_users(users)
-            self._send_json({"status": "ok", "nickname": nickname, "token": create_session(nickname)})
-            return
+            self._send_json({"status": "ok", "nickname": nick, "token": create_session(nick)}); return
 
         if path == "/auth/login":
-            nickname = (data.get("nickname") or "").strip()
-            password = (data.get("password") or "").strip()
-            users = load_users()
-            user = users.get(nickname)
-            if not user:
-                self._send_json({"error": "Utilisateur inconnu"}, 401)
-                return
-            if not verify_password(password, user["password"]):
-                self._send_json({"error": "Mot de passe incorrect"}, 401)
-                return
-            self._send_json({
-                "status": "ok",
-                "nickname": nickname,
-                "token": create_session(nickname),
-                "github_token": user.get("github_token", "")
-            })
-            return
+            nick = (data.get("nickname") or "").strip()
+            pwd = (data.get("password") or "").strip()
+            user = load_users().get(nick)
+            if not user: self._send_json({"error": "Utilisateur inconnu"}, 401); return
+            if not verify_password(pwd, user["password"]):
+                self._send_json({"error": "Mot de passe incorrect"}, 401); return
+            self._send_json({"status": "ok", "nickname": nick, "token": create_session(nick),
+                              "github_token": user.get("github_token", "")}); return
 
         if path == "/auth/check":
             nick = get_user_from_token(token)
-            self._send_json(
-                {"status": "ok", "nickname": nick} if nick else {"error": "Token invalide"},
-                401 if not nick else 200
-            )
-            return
+            self._send_json({"status": "ok", "nickname": nick} if nick else {"error": "Token invalide"},
+                              401 if not nick else 200); return
 
-        # ── Proxy LLM ──
         if path == "/api/chat":
-            proxy_chat(self, data)
-            return
+            proxy_chat(self, data); return
 
-        # ── Protégé ──
-        nickname = get_user_from_token(token) if token else None
-        if not nickname:
-            self._send_json({"error": "Unauthorized"}, 401)
-            return
+        nick = get_user_from_token(token) if token else None
+        if not nick:
+            self._send_json({"error": "Unauthorized"}, 401); return
 
         if path == "/memory":
-            entry = add_user_memory_entry(nickname, data.get("content", ""), data.get("source", "api"))
-            self._send_json({"status": "saved", "nickname": nickname, "entry": entry})
-            return
+            e = add_user_memory_entry(nick, data.get("content", ""), data.get("source", "api"))
+            self._send_json({"status": "saved", "nickname": nick, "entry": e}); return
 
         if path == "/memory/context":
-            self._send_json({"nickname": nickname, "context": get_user_memory_context(nickname)})
-            return
+            self._send_json({"nickname": nick, "context": get_user_memory_context(nick)}); return
 
         if path == "/bash":
             cmd = data.get("command", "")
-            if not cmd:
-                self._send_json({"error": "Commande requise"}, 400)
-                return
-            out, err = run_bash(cmd, nickname)
-            self._send_json({"command": cmd, "output": out[:10000], "error": err, "nickname": nickname})
-            return
+            if not cmd: self._send_json({"error": "Commande requise"}, 400); return
+            out, err = run_bash(cmd, nick)
+            self._send_json({"command": cmd, "output": out[:10000], "error": err, "nickname": nick}); return
 
         self._send_json({"error": "Not found"}, 404)
 
-# ─── Main ───
+
 if __name__ == "__main__":
     server = http.server.HTTPServer(("0.0.0.0", PORT), BridgeHandler)
-    print(f"[BRIDGE] Vzlom Bridge v2.5 démarré sur le port {PORT}")
-    print(f"[BRIDGE] Providers configurés: {sum(1 for p in PROVIDERS.values() if p['key'])}/6")
+    print(f"[BRIDGE] Vzlom Bridge v2.5 sur le port {PORT}")
+    print(f"[BRIDGE] Providers: {sum(1 for p in PROVIDERS.values() if p['key'])}/5")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n[BRIDGE] Arrêt...")
+        print("\n[BRIDGE] Arret...")
         server.server_close()

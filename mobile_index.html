@@ -395,6 +395,7 @@ function afterLogin(){
   document.getElementById('app').classList.add('show');
   document.getElementById('userBadge').textContent='👤 '+S.nick;
   document.getElementById('pnNick').textContent=S.nick;
+  localStorage.setItem('vzlom_token',S.token);
   loadKeys();
   // Charger config du bridge (modèles uniquement)
   loadConfig();
@@ -410,6 +411,7 @@ function afterLogin(){
 async function logout(){
   if(S.token)await bp('/logout',{});
   S.token='';S.nick='';S.history=[];
+  localStorage.removeItem('vzlom_token');
   document.getElementById('app').classList.remove('show');
   document.getElementById('sLogin').classList.remove('hidden');
   document.getElementById('inNick').value='';document.getElementById('inPass').value='';
