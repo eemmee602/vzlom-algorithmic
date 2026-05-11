@@ -124,13 +124,13 @@ body{background:#0d0d1a;color:#e0e0e0;font-family:'Consolas','Courier New',monos
     <div class="user-info">👤 <span id="pnNick">—</span> <button onclick="logout()" style="margin-left:auto;padding:4px 8px;font-size:10px;background:#f44;width:auto">🚪</button></div>
 
     <label>🤖 Modèle</label>
-    <input type="text" id="inModel" value="google/gemini-2.0-flash-lite">
+    <input type="text" id="inModel" value="openai/gpt-4o-mini">
 
     <label>🔄 Fallbacks</label>
-    <textarea id="inFall" rows="3">google/gemini-2.0-flash-lite
+    <textarea id="inFall" rows="3">openai/gpt-4o-mini
 deepseek/deepseek-chat
 mistralai/mistral-small-2501
-meta-llama/llama-3.2-3b-instruct</textarea>
+meta-llama/llama-3.3-70b-instruct</textarea>
 
     <label>⚙ Auto-agent</label>
     <select id="inAuto">
@@ -181,32 +181,37 @@ meta-llama/llama-3.2-3b-instruct</textarea>
 
 // State
 // Auto-detect bridge URL from current page host
-let _host = window.location.hostname;
-const BRIDGE = 'http://' + _host + ':3456';
-let API='https://openrouter.ai/api/v1/chat/completions';
-let S={token:'',nick:'',keys:[],model:'google/gemini-2.0-flash-lite',falls:['deepseek/deepseek-chat','mistralai/mistral-small-2501','meta-llama/llama-3.2-3b-instruct'],auto:'smart',history:[],ki:0,busy:false,iters:0,maxIters:5};
+const BRIDGE = 'http://' + window.location.hostname + ':3456';
+let S={token:'',nick:'',keys:[],model:'openai/gpt-4o-mini',falls:['deepseek/deepseek-chat','mistralai/mistral-small-2501','meta-llama/llama-3.3-70b-instruct'],fallback:'deepseek/deepseek-chat',auto:'smart',history:[],ki:0,busy:false,iters:0,maxIters:5};
 
-// ─── Config loader ───
+// ─── Config loader (modèles et clés méta uniquement, pas de clé brute) ───
 async function loadConfig(){
   try{
+    // Charger la config (modèles uniquement, plus de clé exposée)
     const res=await fetch(`${BRIDGE}/api/config`);
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const cfg=await res.json();
-    // Clé .env
-    if(cfg.openrouter_api_key){
-      if(!S.keys.some(k=>k.id==='env')){
-        S.keys.unshift({id:'env',key:cfg.openrouter_api_key,source:'env'});
-      }
+    if(res.ok){
+      const cfg=await res.json();
+      S.model=cfg.models.default;
+      S.falls=cfg.models.fallbacks;
+      document.getElementById('inModel').value=S.model;
+      document.getElementById('inFall').value=(S.falls||[]).join('\n');
+      if(cfg.providers){document.getElementById('keyCount').textContent=Object.values(cfg.providers).filter(p=>p.key_set).length+'/'+Object.keys(cfg.providers).length+' providers'}
     }
-    S.model=cfg.models.default;
-    S.falls=cfg.models.fallbacks;
-    refreshKeyUI();
-    document.getElementById('inModel').value=S.model;
-    document.getElementById('inFall').value=S.falls.join('\n');
   }catch(e){
     console.error("Config error:",e);
     addMsg('⚠️ Config bridge injoignable: '+e.message,'sys');
   }
+}
+
+// Charger les clés depuis le localStorage (gestion locale côté client)
+function loadKeys(){
+  try{
+    const sv=JSON.parse(localStorage.getItem('v2cfg')||'{}');
+    if(sv.keys)S.keys=sv.keys;
+    if(sv.model)S.model=sv.model;
+    if(sv.falls)S.falls=sv.falls;
+    if(sv.auto)S.auto=sv.auto;
+  }catch(e){}
 }
 
 // ─── Key management ───
@@ -218,7 +223,6 @@ function refreshKeyUI(){
   const list=document.getElementById('keyList');
 
   label.textContent=S.keys.length;
-  const usable=S.keys.filter(k=>k.id!=='env');
   if(S.keys.length){
     indicator.style.display='inline-flex';
     badge.textContent=S.keys[S.ki]?.id?.substring(0,8)||'—';
@@ -247,15 +251,30 @@ function addKeyManual(){
   const val=document.getElementById('inKey').value.trim();
   if(!val){document.getElementById('errLogin').textContent='Clé vide';return}
   if(val.length<10){document.getElementById('errLogin').textContent='Clé trop courte';return}
-  // Check duplicate
   if(S.keys.some(k=>k.key===val)){
     document.getElementById('errLogin').textContent='Clé déjà ajoutée';return;
   }
-  S.keys.push({id:secrets.token_hex?secrets.token_hex(8):Math.random().toString(36).slice(2,10),key:val,source:'manual',hits:0,last_used:0});
+  // Envoyer au bridge (protégé) pour stockage serveur
+  fetch(`${BRIDGE}/admin/keys?token=${S.token}`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({key:val})
+  }).then(r=>r.json()).then(r=>{
+    if(r.error)throw new Error(r.error);
+    addMsg('✅ Clé ajoutée et synchronisée avec le serveur (total: '+S.keys.length+')','sys');
+  }).catch(e=>{
+    // En cas d'échec du serveur, on garde en local uniquement
+    addMsg('⚠️ Stockage serveur échoué: '+e.message+'. Clé gardée en local.','sys');
+    _addLocalKey(val);
+  });
+}
+
+function _addLocalKey(val){
+  S.keys.push({id:Math.random().toString(36).slice(2,10),key:val,source:'manual',hits:0,last_used:0});
   document.getElementById('inKey').value='';
   refreshKeyUI();
   saveCfg();
-  addMsg('✅ Clé ajoutée (total: '+S.keys.length+')','sys');
+  addMsg('✅ Clé ajoutée (local, total: '+S.keys.length+')','sys');
 }
 
 function importKeysBulk(){
@@ -278,7 +297,12 @@ function importKeysBulk(){
 function removeKey(i){
   const k=S.keys[i];
   if(k.source==='env')return;
-  if(!confirm('Supprimer la clé '+k.id.substring(0,8)+'…?'))return;
+  // Demander aussi la suppression au serveur
+  fetch(`${BRIDGE}/admin/keys?token=${S.token}`,{
+    method:'DELETE',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:k.id})
+  }).catch(()=>{}); // Ignore errors
   S.keys.splice(i,1);
   if(S.ki>=S.keys.length)S.ki=0;
   refreshKeyUI();
@@ -292,8 +316,10 @@ function rotateKey(){
   addMsg('🔄 Clé active: '+S.keys[S.ki].id.substring(0,8),'keyinfo');
 }
 
-// Generate a random id for keys
-const secrets=secrets||{token_hex:n=>Math.random().toString(36).slice(2,2+n)};
+// Générateur d'ID (fallback browser)
+const secrets=window.crypto&&window.crypto.getRandomValues
+  ? {token_hex:n=>{const a=new Uint8Array(n);window.crypto.getRandomValues(a);return Array.from(a).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,n*2)} }
+  : {token_hex:n=>Math.random().toString(36).slice(2,2+n)};
 
 const WORDS=['Thinking...','Analyzing...','Reading...','Beaming...','Imagining...','Coding...','Searching...','Scanning...','Synthesizing...','Crafting...','Forging...','Mapping...'];
 let twInt=null;
@@ -310,13 +336,19 @@ function twStop(){
 }
 function sdot(c){document.getElementById('sdot').className='dot '+c}
 
-async function bp(path,body){
-  try{
-    const o={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
-    const u=S.token?`${BRIDGE}${path}?token=${S.token}`:`${BRIDGE}${path}`;
-    const r=await fetch(u,o);
-    return await r.json();
-  }catch(e){return{error:e.message||'Erreur réseau'}}
+// Appel au PROXY serveur (clé jamais exposée côté client)
+async function proxyChat(messages,model,max_tokens){
+  const res=await fetch(`${BRIDGE}/api/chat?token=${S.token}`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({model,messages,max_tokens})
+  });
+  if(!res.ok){
+    if(res.status===429)throw new Error('RATE_LIMIT');
+    const txt=await res.text();
+    throw new Error(`HTTP ${res.status}: ${txt.substring(0,200)}`);
+  }
+  return res; // Stream SSE
 }
 
 // Auth
@@ -333,20 +365,28 @@ async function login(){
   const n=document.getElementById('inNick').value.trim(),p=document.getElementById('inPass').value.trim();
   if(!n||!p){document.getElementById('errLogin').textContent='Champs requis';return}
   document.getElementById('errLogin').textContent='⏳ Connexion...';
-  const r=await bp('/auth/login',{nickname:n,password:p});
-  if(r.error){document.getElementById('errLogin').textContent=r.error;return}
-  S.token=r.token;S.nick=r.nickname;
-  afterLogin();
+  try{
+    const r=await bp('/auth/login',{nickname:n,password:p});
+    if(r.error){document.getElementById('errLogin').textContent=r.error;return}
+    S.token=r.token;S.nick=r.nickname;
+    afterLogin();
+  }catch(e){
+    document.getElementById('errLogin').textContent='Erreur réseau';
+  }
 }
 
 async function register(){
   const n=document.getElementById('inRegNick').value.trim(),p=document.getElementById('inRegPass').value.trim();
   if(!n||!p){document.getElementById('errReg').textContent='Champs requis';return}
   document.getElementById('errReg').textContent='⏳ Création...';
-  const r=await bp('/auth/register',{nickname:n,password:p});
-  if(r.error){document.getElementById('errReg').textContent=r.error;return}
-  S.token=r.token;S.nick=r.nickname;
-  afterLogin();
+  try{
+    const r=await bp('/auth/register',{nickname:n,password:p});
+    if(r.error){document.getElementById('errReg').textContent=r.error;return}
+    S.token=r.token;S.nick=r.nickname;
+    afterLogin();
+  }catch(e){
+    document.getElementById('errReg').textContent='Erreur réseau';
+  }
 }
 
 function afterLogin(){
@@ -355,12 +395,9 @@ function afterLogin(){
   document.getElementById('app').classList.add('show');
   document.getElementById('userBadge').textContent='👤 '+S.nick;
   document.getElementById('pnNick').textContent=S.nick;
-  // Load config from localStorage
-  const sv=JSON.parse(localStorage.getItem('v2cfg')||'{}');
-  if(sv.keys)S.keys=sv.keys;
-  if(sv.model)S.model=sv.model;
-  if(sv.falls)S.falls=sv.falls;
-  if(sv.auto)S.auto=sv.auto;
+  loadKeys();
+  // Charger config du bridge (modèles uniquement)
+  loadConfig();
   document.getElementById('inModel').value=S.model;
   document.getElementById('inFall').value=(S.falls||[]).join('\n');
   document.getElementById('inAuto').value=S.auto;
@@ -420,21 +457,6 @@ function tab(t){
   document.getElementById('tbChat').classList.toggle('on',t==='chat');
 }
 
-// Config save
-document.getElementById('inKey').addEventListener('change',()=>{
-  const val=document.getElementById('inKey').value.trim();
-  if(val)addKeyManual();
-});
-document.getElementById('inModel').addEventListener('change',()=>{
-  S.model=document.getElementById('inModel').value.trim();saveCfg();
-});
-document.getElementById('inFall').addEventListener('change',()=>{
-  S.falls=document.getElementById('inFall').value.split('\n').map(s=>s.trim()).filter(Boolean);
-  saveCfg();
-});
-document.getElementById('inAuto').addEventListener('change',()=>{
-  S.auto=document.getElementById('inAuto').value;saveCfg();
-});
 function saveCfg(){localStorage.setItem('v2cfg',JSON.stringify({keys:S.keys,model:S.model,falls:S.falls,auto:S.auto}))}
 
 // System prompt
@@ -487,34 +509,16 @@ async function loop(txt,mem,isAuto){
 
   while(att<=maxAtt){
     const ki=S.ki%S.keys.length;
-    const key=S.keys[ki]?.key;
-    if(!key){addMsg('❌ Aucune clé API valide','status');sdot('err');return}
-
     const model=att<1?S.model:(S.falls?.[att-1]||S.model);
-    addMsg('🔄 Tentative '+(att+1)+'/'+(maxAtt+1)+': '+model.split('/').pop()+' ['+S.keys[ki].id.substring(0,8)+']','status');
+    const modelName=model.split('/').pop();
+    addMsg('🔄 Tentative '+(att+1)+'/'+(maxAtt+1)+': '+modelName+' ['+S.keys[ki].id.substring(0,8)+']','status');
     curDiv=null;inCode=false;cBuf='';doneShow=false;
     S.keys[ki].hits=(S.keys[ki].hits||0)+1;
     S.keys[ki].last_used=Date.now();
 
     try{
-      const res=await fetch(API,{
-        method:'POST',
-        headers:{
-          'Authorization':'Bearer '+key,'Content-Type':'application/json',
-          'HTTP-Referer':'https://github.com/eemmee602/vzlom-algorithmic','X-Title':'Vzlom Mobile'
-        },
-        body:JSON.stringify({model,messages:msgs,stream:true,max_tokens:2048})
-      });
-
-      // Rate limit → rotation automatique
-      if(res.status===429){
-        lastErr='Rate limit (HTTP 429)';
-        S.ki=(S.ki+1)%S.keys.length;att++;
-        refreshKeyUI();
-        continue;
-      }
-      if(!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).substring(0,200)}`);
-
+      // ⚡ APPEL VIA PROXY — la clé ne quitte jamais le serveur
+      const res=await proxyChat(msgs,model,2000);
       const rdr=res.body.getReader(),dec=new TextDecoder();
       let full='';
       while(true){
@@ -554,6 +558,11 @@ async function loop(txt,mem,isAuto){
     }catch(e){
       lastErr=e.message;S.ki=(S.ki+1)%S.keys.length;att++;
       refreshKeyUI();
+      if(e.message==='RATE_LIMIT'){
+        addMsg('⚡ Rate limit → rotation clé','status');
+      }else{
+        addMsg('⚡ '+e.message.substring(0,80),'status');
+      }
     }
   }
   addMsg('❌ Échec: '+lastErr,'status');sdot('err');
@@ -601,12 +610,39 @@ function app(t){
   curDiv.textContent+=t;document.getElementById('chat').scrollTop=document.getElementById('chat').scrollHeight;
 }
 
+function bp(path,body){
+  try{
+    const o={method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};
+    const u=S.token?`${BRIDGE}${path}?token=${S.token}`:`${BRIDGE}${path}`;
+    return fetch(u,o).then(r=>r.json());
+  }catch(e){return Promise.resolve({error:e.message||'Erreur réseau'})}
+}
+
 document.getElementById('inTxt').addEventListener('keydown',function(e){
   if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}
 });
 
+// Config save
+document.getElementById('inKey').addEventListener('change',()=>{
+  const val=document.getElementById('inKey').value.trim();
+  if(val)addKeyManual();
+});
+document.getElementById('inModel').addEventListener('change',()=>{
+  S.model=document.getElementById('inModel').value.trim();saveCfg();
+});
+document.getElementById('inFall').addEventListener('change',()=>{
+  S.falls=document.getElementById('inFall').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  saveCfg();
+});
+document.getElementById('inAuto').addEventListener('change',()=>{
+  S.auto=document.getElementById('inAuto').value;saveCfg();
+});
+
 // ─── INIT au chargement ───
-loadConfig();
+// Si pas de token, aller directement au login
+const savedToken=localStorage.getItem('vzlom_token');
+if(savedToken){S.token=savedToken}
+loadKeys();
 </script>
 </body>
 </html>
