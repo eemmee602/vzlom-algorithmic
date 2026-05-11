@@ -1,36 +1,32 @@
 #!/usr/bin/env python3
 """
-Vzlom Bridge v2.1 — Multi-user, auth, mémoire isolée, auto-agent loop
-Serveur API REST minimal (zéro dépendance).
-Port : 3456
+Vzlom Bridge v2.2 — Single server, single port (3456).
+Sert l'API REST + l'interface mobile sur le même port.
+Zéro dépendance externe.
 """
 import http.server, json, subprocess, os, hashlib, uuid, secrets, time
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime
-import importlib
-import sys
+import importlib, sys, mimetypes
 from dotenv import load_dotenv
 
 # ─── Config ───
 PORT = 3456
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-WORKSPACE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "workspace")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+WORKSPACE = os.path.join(BASE_DIR, "workspace")
 USERS_FILE = os.path.join(DATA_DIR, "users.json")
 KEYS_FILE = os.path.join(DATA_DIR, "keys.json")
-SESSIONS = {}  # {token: nickname, created_at} — en mémoire, pas persistant
+SESSIONS = {}
 
-# Charger .env
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+load_dotenv(os.path.join(BASE_DIR, ".env"))
 
-# Clés API — chargement depuis .env (clé unique) + keys.json (multi-clés)
+# ─── API Keys ───
 def load_all_api_keys():
-    """Charge toutes les clés API disponibles. Retourne une liste de {id, key, source, created, hits, last_used}."""
     keys = []
-    # Clé .env principale
     env_key = os.getenv("OPENROUTER_API_KEY", "").strip()
     if env_key:
         keys.append({"id": "env", "key": env_key, "source": "env", "created": "env", "hits": 0, "last_used": 0})
-    # Clés depuis keys.json
     try:
         with open(KEYS_FILE) as f:
             data = json.load(f)
@@ -51,7 +47,6 @@ def load_all_api_keys():
     return keys
 
 def save_api_keys(keys):
-    """Sauvegarde les clés dans keys.json (sans la clé env)."""
     try:
         data_keys = [
             {k: v for k, v in entry.items() if k != "key"} | {"key_exists": True}
@@ -63,35 +58,25 @@ def save_api_keys(keys):
         print(f"[WARN] Erreur sauvegarde keys.json: {e}")
 
 ALL_KEYS = load_all_api_keys()
-
-# Initialiser keys.json si inexistant
 if not os.path.exists(KEYS_FILE):
     save_api_keys(ALL_KEYS)
 
 os.makedirs(DATA_DIR, exist_ok=True)
 os.makedirs(WORKSPACE, exist_ok=True)
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN", "")
 
-# ─── Users DB ───
+# ─── Users ───
 def load_users():
     try:
-        with open(USERS_FILE) as f:
-            return json.load(f)
-    except:
-        return {}
+        with open(USERS_FILE) as f: return json.load(f)
+    except: return {}
 
 def save_users(users):
-    with open(USERS_FILE, "w") as f:
-        json.dump(users, f, indent=2)
+    with open(USERS_FILE, "w") as f: json.dump(users, f, indent=2)
 
 def hash_password(password, salt=None):
-    if salt is None:
-        salt = secrets.token_hex(8)
-    h = hashlib.sha256((salt + password).encode()).hexdigest()
-    return f"{salt}${h}"
+    if salt is None: salt = secrets.token_hex(8)
+    return f"{salt}${hashlib.sha256((salt + password).encode()).hexdigest()}"
 
 def verify_password(password, stored):
     salt, h = stored.split("$", 1)
@@ -103,151 +88,157 @@ def create_session(nickname):
     return token
 
 def get_user_from_token(token):
-    """Retourne le nickname ou None si token invalide."""
     session = SESSIONS.get(token)
-    if not session:
-        return None
+    if not session: return None
     if time.time() - session["created"] > 86400:
         del SESSIONS[token]
         return None
     return session["nickname"]
 
-# ─── Per-user memory ───
-def get_user_memory_file(nickname):
-    return os.path.join(DATA_DIR, f"memory_{nickname}.json")
+# ─── User memory ───
+def get_user_memory_file(nickname): return os.path.join(DATA_DIR, f"memory_{nickname}.json")
 
 def load_user_memory(nickname):
     path = get_user_memory_file(nickname)
     try:
-        with open(path) as f:
-            return json.load(f)
-    except:
-        return {"nickname": nickname, "entries": []}
+        with open(path) as f: return json.load(f)
+    except: return {"nickname": nickname, "entries": []}
 
 def save_user_memory(nickname, data):
-    path = get_user_memory_file(nickname)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with open(get_user_memory_file(nickname), "w") as f: json.dump(data, f, indent=2)
 
 def add_user_memory_entry(nickname, content, source="user"):
     data = load_user_memory(nickname)
-    data["entries"].append({
-        "content": content[:2000],
-        "source": source,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    })
-    if len(data["entries"]) > 10000:
-        data["entries"] = data["entries"][-10000:]
+    data["entries"].append({"content": content[:2000], "source": source, "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    if len(data["entries"]) > 10000: data["entries"] = data["entries"][-10000:]
     save_user_memory(nickname, data)
     return data["entries"][-1]
 
 def get_user_memory_context(nickname, recent=30):
     data = load_user_memory(nickname)
     entries = data["entries"][-recent:]
-    if not entries:
-        return "Aucune mémoire."
-    lines = [f"[{e['timestamp']}] {e['source']}: {e['content'][:200]}" if len(e['content']) > 200 else f"[{e['timestamp']}] {e['source']}: {e['content']}" for e in entries]
-    return "\n".join(lines)
+    if not entries: return "Aucune mémoire."
+    return "\n".join(f"[{e['timestamp']}] {e['source']}: {e['content'][:200] if len(e['content']) > 200 else e['content']}" for e in entries)
 
-# ─── Per-user workspace ───
+# ─── Workspace ───
 def get_user_workspace(nickname):
     path = os.path.join(WORKSPACE, nickname)
     os.makedirs(path, exist_ok=True)
     return path
 
 def get_user_github_token(nickname):
-    data = load_users()
-    user = data.get(nickname, {})
+    user = load_users().get(nickname, {})
     return user.get("github_token") or user.get("github")
 
-# ─── Bash (sandboxé par user) ───
+# ─── Bash ───
 BLACKLIST = ["rm -rf /", "sudo", "mkfs", "dd if=", "> /dev/sd", ":(){ :|:& };:"]
 
 def run_bash(command, nickname):
-    import subprocess
     for d in BLACKLIST:
-        if d in command.lower():
-            return f"BLOCKED: Commande interdite ({d})", True
+        if d in command.lower(): return f"BLOCKED: Commande interdite ({d})", True
     cwd = get_user_workspace(nickname)
     try:
-        result = subprocess.run(
-            command, shell=True, capture_output=True, text=True,
-            timeout=30, cwd=cwd,
-            env={**os.environ, "PATH": "/usr/local/bin:/usr/bin:/bin",
-                 "VZLOM_USER": nickname}
-        )
-        output = result.stdout
-        if result.stderr:
-            output += "\n[STDERR]\n" + result.stderr
-        return output, (result.returncode != 0)
-    except subprocess.TimeoutExpired:
-        return "TIMEOUT: 30s", True
-    except Exception as e:
-        return f"ERROR: {e}", True
+        r = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=30, cwd=cwd,
+                           env={**os.environ, "PATH": "/usr/local/bin:/usr/bin:/bin", "VZLOM_USER": nickname})
+        out = r.stdout + ("\n[STDERR]\n" + r.stderr if r.stderr else "")
+        return out, (r.returncode != 0)
+    except subprocess.TimeoutExpired: return "TIMEOUT: 30s", True
+    except Exception as e: return f"ERROR: {e}", True
 
-# ─── Task queue (auto-agent loop) ───
-def get_user_task_file(nickname):
-    return os.path.join(DATA_DIR, f"tasks_{nickname}.json")
+# ─── Tasks ───
+def get_user_task_file(nickname): return os.path.join(DATA_DIR, f"tasks_{nickname}.json")
 
 def load_user_tasks(nickname):
     path = get_user_task_file(nickname)
     try:
-        with open(path) as f:
-            return json.load(f)
-    except:
-        return {"tasks": []}
+        with open(path) as f: return json.load(f)
+    except: return {"tasks": []}
 
 def save_user_tasks(nickname, data):
-    path = get_user_task_file(nickname)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
+    with open(get_user_task_file(nickname), "w") as f: json.dump(data, f, indent=2)
 
 def add_user_task(nickname, task):
     data = load_user_tasks(nickname)
-    data["tasks"].append({
-        "id": str(uuid.uuid4())[:8],
-        "task": task[:500],
-        "status": "pending",
-        "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "result": "",
-    })
+    data["tasks"].append({"id": str(uuid.uuid4())[:8], "task": task[:500], "status": "pending",
+                          "created": datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "result": ""})
     save_user_tasks(nickname, data)
     return data["tasks"][-1]
 
-# ─── Serveur HTTP ───
-class BridgeHandler(http.server.BaseHTTPRequestHandler):
-    def log_message(self, format, *args):
-        pass
+# ─── Key rotation ───
+def rotate_key():
+    """Retourne la prochaine clé API active (round-robin basé sur last_used)."""
+    keys = load_all_api_keys()
+    if not keys: return None
+    # Trier par last_used ascendant → utiliser la moins récemment utilisée
+    keys_sorted = sorted(keys, key=lambda k: k.get("last_used", 0))
+    chosen = keys_sorted[0]
+    chosen["hits"] = chosen.get("hits", 0) + 1
+    chosen["last_used"] = time.time()
+    # Sauvegarder le compteur mis à jour (uniquement les clés non-env)
+    save_api_keys(keys)
+    return chosen["key"]
 
-    def _parse_body(self):
-        """Parse le body JSON d'une requête POST/PUT."""
-        length = int(self.headers.get("Content-Length", 0))
-        if length == 0:
-            return {}
-        raw = self.rfile.read(length).decode("utf-8")
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            return {}
+def rotate_key_handler(self):
+    """Répond avec la prochaine clé API pour le client (sans exposer la clé en clair dans les logs)."""
+    key = rotate_key()
+    if not key:
+        self._send_json({"error": "Aucune clé API disponible"}, 503)
+        return
+    # Ne renvoyer que les métadonnées, jamais la clé brute
+    self._send_json({"status": "ok", "key_masked": key[:8] + "••••" + key[-4:] if len(key) > 12 else "****"})
+
+# ─── Handler HTTP ───
+class BridgeHandler(http.server.BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.0"
+
+    def _no_cache(self):
+        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+
+    def _cors(self):
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def _send_json(self, data, status=200):
         self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
-        self.send_header("Pragma", "no-cache")
-        self.send_header("Expires", "0")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self._no_cache()
+        self._cors()
         self.end_headers()
         self.wfile.write(json.dumps(data, ensure_ascii=False).encode())
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self._cors()
+        self._no_cache()
         self.end_headers()
+
+    def _parse_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        if length == 0: return {}
+        raw = self.rfile.read(length).decode("utf-8")
+        try: return json.loads(raw)
+        except json.JSONDecodeError: return {}
+
+    # ── Service du HTML (interface mobile) ──
+    def serve_html(self, filename="mobile_index.html"):
+        filepath = os.path.join(BASE_DIR, filename)
+        if not os.path.exists(filepath):
+            self.send_error(404, "HTML not found")
+            return
+        try:
+            with open(filepath, "rb") as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(content)))
+            self._no_cache()
+            self.end_headers()
+            self.wfile.write(content)
+        except Exception as e:
+            self.send_error(500, str(e))
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -255,60 +246,70 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
         qs = parse_qs(parsed.query)
         token = (qs.get("token") or [None])[0]
 
-        # Favicon — éviter le 404 bruyant
+        # ── Pages HTML (interface mobile) ──
+        if path in ("/", "/index.html", "/mobile.html"):
+            self.serve_html("mobile_index.html")
+            return
+
+        # Favicon
         if path == "/favicon.ico":
-            self.send_response(204)
-            self.end_headers()
+            favicon_path = os.path.join(BASE_DIR, "favicon.ico")
+            if os.path.exists(favicon_path):
+                with open(favicon_path, "rb") as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/x-icon")
+                self.send_header("Content-Length", str(len(content)))
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(204)
+                self.end_headers()
             return
 
-        # Auth check
-        user = get_user_from_token(token) if token else None
-        if not user and path not in ["/auth/login", "/auth/register", "/health", "/api/config", "/api/keys/public"]:
-            self._send_json({"error": "Unauthorized"}, 401)
+        # ── API publique (sans auth) ──
+        if path == "/health":
+            self._send_json({"name": "Vzlom Bridge v2.2", "status": "ok", "version": "2.2"})
             return
 
-        # API config (accessible sans auth)
         if path == "/api/config":
             self._send_json({
                 "openrouter_api_key": OPENROUTER_API_KEY,
                 "models": {
                     "default": "google/gemini-2.0-flash-lite",
-                    "fallbacks": [
-                        "deepseek/deepseek-chat",
-                        "mistralai/mistral-small-2501",
-                        "meta-llama/llama-3.2-3b-instruct",
-                    ]
+                    "fallbacks": ["deepseek/deepseek-chat", "mistralai/mistral-small-2501", "meta-llama/llama-3.2-3b-instruct"],
                 }
             })
             return
 
-        # Clés publiques (sans la clé elle-même)
         if path == "/api/keys/public":
             keys = load_all_api_keys()
             self._send_json({
                 "count": len(keys),
                 "ids": [k["id"] for k in keys],
-                "models": {
-                    "default": "google/gemini-2.0-flash-lite",
-                    "fallbacks": [
-                        "deepseek/deepseek-chat",
-                        "mistralai/mistral-small-2501",
-                        "meta-llama/llama-3.2-3b-instruct",
-                    ]
-                }
+                "models": {"default": "google/gemini-2.0-flash-lite",
+                           "fallbacks": ["deepseek/deepseek-chat", "mistralai/mistral-small-2501", "meta-llama/llama-3.2-3b-instruct"]}
             })
             return
 
+        # Rotation de clé (endpoint public, nécessaire pour mobile)
+        if path == "/api/keys/next":
+            rotate_key_handler(self)
+            return
+
+        # ── Routes protégées (auth) ──
+        user = get_user_from_token(token) if token else None
+        if not user:
+            self._send_json({"error": "Unauthorized"}, 401)
+            return
+
         if path == "/api/logs":
-            if not user:
-                self._send_json({"error": "Unauthorized"}, 401)
-                return
             log_file = os.path.join(get_user_workspace(user), "vzlom.log")
             try:
                 with open(log_file, "r") as f:
                     logs = f.read()
                 self.send_response(200)
-                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
                 self.wfile.write(logs.encode())
@@ -316,58 +317,33 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
                 self._send_json({"error": "No logs found"}, 404)
             return
 
-        # ── Routes standard ──
-        if path == "/" or path == "/health":
-            self._send_json({
-                "name": "Vzlom Bridge v2.1",
-                "status": "ok",
-                "version": "2.1",
-                "endpoints": {
-                    "POST /auth/register": "Créer un compte",
-                    "POST /auth/login": "Se connecter",
-                    "GET /health": "Test connexion",
-                    "GET /api/config": "Config API (sans auth)",
-                    "GET /api/keys/public": "Liste clés publiques (sans auth)",
-                    "GET /api/logs?token=X": "Voir logs (auth)",
-                    "GET /memory?token=X": "Voir mémoire (auth)",
-                    "POST /memory": "Ajouter mémoire (auth)",
-                    "POST /bash": "Exécuter bash (auth)",
-                    "GET /tasks?token=X": "Voir tâches (auth)",
-                    "POST /tasks": "Ajouter une tâche (auth)",
-                    "POST /admin/keys?token=X": "Ajouter une clé API (admin)",
-                    "GET /admin/keys?token=X": "Lister les clés API (admin)",
-                }
-            })
-            return
-
         if path == "/memory":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide ou expiré. Re-login."}, 401)
-                return
-            data = load_user_memory(nickname)
-            recent = data["entries"][-50:]
-            self._send_json({
-                "nickname": nickname,
-                "count": len(data["entries"]),
-                "entries": recent
-            })
+            data = load_user_memory(user)
+            self._send_json({"nickname": user, "count": len(data["entries"]), "entries": data["entries"][-50:]})
             return
 
         if path == "/tasks":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            data = load_user_tasks(nickname)
-            self._send_json({
-                "nickname": nickname,
-                "count": len(data["tasks"]),
-                "tasks": data["tasks"]
-            })
+            data = load_user_tasks(user)
+            self._send_json({"nickname": user, "count": len(data["tasks"]), "tasks": data["tasks"]})
+            return
+
+        if path == "/admin/keys":
+            self.do_GET_admin_keys(user)
             return
 
         self._send_json({"error": "Not found"}, 404)
+
+    def do_GET_admin_keys(self, nickname):
+        """GET /admin/keys — admin seulement."""
+        if nickname != "admin":
+            self._send_json({"error": "Admin required"}, 403)
+            return
+        safe_keys = []
+        for k in load_all_api_keys():
+            safe_keys.append({"id": k["id"], "source": k["source"], "created": k["created"],
+                              "hits": k["hits"], "last_used": k["last_used"],
+                              "masked": k["key"][:8] + "••••" + k["key"][-4:] if len(k["key"]) > 12 else "****"})
+        self._send_json({"count": len(safe_keys), "keys": safe_keys})
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -382,223 +358,96 @@ class BridgeHandler(http.server.BaseHTTPRequestHandler):
             password = (data.get("password") or "").strip()
             github_token = (data.get("github_token") or "").strip()
             if len(nickname) < 2 or len(password) < 2:
-                self._send_json({"error": "Surnom (2+) et mot de passe (2+) requis"}, 400)
-                return
-            if nickname == "admin" or nickname == "root":
-                self._send_json({"error": "Ce surnom est réservé"}, 400)
-                return
+                self._send_json({"error": "Surnom (2+) et mot de passe (2+) requis"}, 400); return
+            if nickname in ("admin", "root"):
+                self._send_json({"error": "Ce surnom est réservé"}, 400); return
             users = load_users()
             if nickname in users:
-                self._send_json({"error": "Ce surnom existe déjà"}, 409)
-                return
-            users[nickname] = {
-                "password": hash_password(password),
-                "created": datetime.now().isoformat(),
-                "github_token": github_token,
-            }
+                self._send_json({"error": "Ce surnom existe déjà"}, 409); return
+            users[nickname] = {"password": hash_password(password), "created": datetime.now().isoformat(), "github_token": github_token}
             save_users(users)
-            token = create_session(nickname)
-            self._send_json({"status": "ok", "nickname": nickname, "token": token})
+            self._send_json({"status": "ok", "nickname": nickname, "token": create_session(nickname)})
+            return
 
-        elif path == "/auth/login":
+        if path == "/auth/login":
             nickname = (data.get("nickname") or "").strip()
             password = (data.get("password") or "").strip()
             users = load_users()
             user = users.get(nickname)
-            if not user:
-                self._send_json({"error": "Utilisateur inconnu"}, 401)
-                return
-            if not verify_password(password, user["password"]):
-                self._send_json({"error": "Mot de passe incorrect"}, 401)
-                return
-            token = create_session(nickname)
-            self._send_json({
-                "status": "ok", "nickname": nickname, "token": token,
-                "github_token": user.get("github_token", ""),
-            })
+            if not user: self._send_json({"error": "Utilisateur inconnu"}, 401); return
+            if not verify_password(password, user["password"]): self._send_json({"error": "Mot de passe incorrect"}, 401); return
+            self._send_json({"status": "ok", "nickname": nickname, "token": create_session(nickname), "github_token": user.get("github_token", "")})
+            return
 
-        elif path == "/auth/check":
-            """Vérifie si un token est toujours valide."""
-            nickname = get_user_from_token(token)
-            if nickname:
-                self._send_json({"status": "ok", "nickname": nickname})
-            else:
-                self._send_json({"status": "expired", "error": "Token expiré ou invalide"}, 401)
+        if path == "/auth/check":
+            nick = get_user_from_token(token)
+            self._send_json({"status": "ok", "nickname": nick} if nick else {"status": "expired", "error": "Token invalide"}, 401 if not nick else 200)
+            return
 
-        # ── Memory ──
-        elif path == "/memory":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            content = data.get("content", "")
-            source = data.get("source", "api")
-            entry = add_user_memory_entry(nickname, content, source)
-            self._send_json({"status": "saved", "nickname": nickname, "entry": entry})
+        # Protégé
+        nickname = get_user_from_token(token) if token else None
+        if not nickname:
+            self._send_json({"error": "Unauthorized"}, 401); return
 
-        elif path == "/memory/context":
-            """Récupère le contexte mémoire formaté pour le system prompt."""
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            context = get_user_memory_context(nickname)
-            self._send_json({"nickname": nickname, "context": context})
+        if path == "/memory":
+            entry = add_user_memory_entry(nickname, data.get("content", ""), data.get("source", "api"))
+            self._send_json({"status": "saved", "nickname": nickname, "entry": entry}); return
 
-        # ── Bash ──
-        elif path == "/bash":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            command = data.get("command", "")
-            if not command:
-                self._send_json({"error": "Commande requise"}, 400)
-                return
-            output, is_error = run_bash(command, nickname)
-            self._send_json({
-                "command": command, "output": output[:10000],
-                "error": is_error, "nickname": nickname
-            })
+        if path == "/memory/context":
+            self._send_json({"nickname": nickname, "context": get_user_memory_context(nickname)}); return
 
-        # ── Tasks (auto-agent) ──
-        elif path == "/tasks":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
+        if path == "/bash":
+            cmd = data.get("command", "")
+            if not cmd: self._send_json({"error": "Commande requise"}, 400); return
+            out, err = run_bash(cmd, nickname)
+            self._send_json({"command": cmd, "output": out[:10000], "error": err, "nickname": nickname}); return
+
+        if path == "/tasks":
             task = data.get("task", "")
-            if not task:
-                self._send_json({"error": "Description de tâche requise"}, 400)
-                return
-            entry = add_user_task(nickname, task)
-            self._send_json({"status": "created", "nickname": nickname, "task": entry})
+            if not task: self._send_json({"error": "Description requise"}, 400); return
+            self._send_json({"status": "created", "nickname": nickname, "task": add_user_task(nickname, task)}); return
 
-        elif path == "/tasks/complete":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            task_id = data.get("id", "")
-            result = data.get("result", "")
-            tasks_data = load_user_tasks(nickname)
-            for t in tasks_data["tasks"]:
-                if t["id"] == task_id:
-                    t["status"] = "completed"
-                    t["result"] = result[:2000]
-                    break
-            save_user_tasks(nickname, tasks_data)
-            self._send_json({"status": "ok"})
+        if path == "/tasks/complete":
+            tid = data.get("id", "")
+            tasks = load_user_tasks(nickname)
+            for t in tasks["tasks"]:
+                if t["id"] == tid: t["status"], t["result"] = "completed", (data.get("result", ""))[:2000]
+            save_user_tasks(nickname, tasks)
+            self._send_json({"status": "ok"}); return
 
-        elif path == "/logout":
-            """Déconnecter (supprimer la session)."""
-            if token and token in SESSIONS:
-                del SESSIONS[token]
-            self._send_json({"status": "ok", "message": "Déconnecté"})
+        if path == "/logout":
+            if token and token in SESSIONS: del SESSIONS[token]
+            self._send_json({"status": "ok", "message": "Déconnecté"}); return
 
-        # ── Upload ──
-        elif path == "/upload":
+        if path == "/upload":
             import base64
-            upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-            os.makedirs(upload_dir, exist_ok=True)
-            files_uploaded = data.get("files", {})
-            if not files_uploaded:
-                self._send_json({"error": "Aucun fichier. Envoie {files: {nom: base64, ...}}"})
-                return
-            results = []
-            for name, b64_content in files_uploaded.items():
+            up = os.path.join(BASE_DIR, "uploads")
+            os.makedirs(up, exist_ok=True)
+            for name, b64 in (data.get("files") or {}).items():
                 try:
-                    raw = base64.b64decode(b64_content)
-                    safe_name = os.path.basename(name.replace("\\", "/"))
-                    dest = os.path.join(upload_dir, safe_name)
-                    with open(dest, "wb") as f:
-                        f.write(raw)
-                    results.append(f"{safe_name} ({len(raw)} bytes)")
-                except Exception as e:
-                    results.append(f"{name}: {e}")
-            self._send_json({"status": "ok", "files": results, "total": len(files_uploaded)})
+                    with open(os.path.join(up, os.path.basename(name)), "wb") as f: f.write(base64.b64decode(b64))
+                except: pass
+            self._send_json({"status": "ok"}); return
 
-        elif path == "/upload/list":
-            upload_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads")
-            os.makedirs(upload_dir, exist_ok=True)
-            files = []
-            for f in os.listdir(upload_dir):
-                fp = os.path.join(upload_dir, f)
-                if os.path.isfile(fp):
-                    files.append({"name": f, "size": os.path.getsize(fp), "modified": os.path.getmtime(fp)})
-            self._send_json({"files": files})
+        if path == "/admin/keys":
+            if nickname != "admin": self._send_json({"error": "Admin required"}, 403); return
+            new_key = (data.get("key") or "").strip()
+            if not new_key: self._send_json({"error": "Clé requise"}, 400); return
+            keys = load_all_api_keys()
+            if any(k["key"] == new_key for k in keys): self._send_json({"error": "Doublon"}, 409); return
+            keys.append({"id": secrets.token_hex(8), "key": new_key, "source": "admin", "created": datetime.now().isoformat(), "hits": 0, "last_used": 0})
+            save_api_keys(keys)
+            ALL_KEYS.clear(); ALL_KEYS.extend(keys)
+            self._send_json({"status": "ok", "count": len(keys)}); return
 
-        # ── Admin: Gestion des clés API ──
-        elif path == "/admin/keys":
-            nickname = get_user_from_token(token)
-            if not nickname:
-                self._send_json({"error": "Token invalide"}, 401)
-                return
-            if nickname != "admin":
-                self._send_json({"error": "Accès admin requis"}, 403)
-                return
-            # GET /admin/keys — lister
-            if self.command == "GET":
-                keys = load_all_api_keys()
-                safe_keys = []
-                for k in keys:
-                    safe_keys.append({
-                        "id": k["id"],
-                        "source": k["source"],
-                        "created": k["created"],
-                        "hits": k["hits"],
-                        "last_used": k["last_used"],
-                        "masked": k["key"][:8] + "••••" + k["key"][-4:] if len(k["key"]) > 12 else "****"
-                    })
-                self._send_json({"count": len(safe_keys), "keys": safe_keys})
-                return
-            # POST /admin/keys — ajouter
-            elif self.command == "POST":
-                new_key = (data.get("key") or "").strip()
-                if not new_key:
-                    self._send_json({"error": "Clé API requise"}, 400)
-                    return
-                if len(new_key) < 10:
-                    self._send_json({"error": "Clé trop courte"}, 400)
-                    return
-                keys = load_all_api_keys()
-                # Vérifier doublon
-                for k in keys:
-                    if k["key"] == new_key:
-                        self._send_json({"error": "Clé déjà existante"}, 409)
-                        return
-                keys.append({
-                    "id": secrets.token_hex(8),
-                    "key": new_key,
-                    "source": "admin",
-                    "created": datetime.now().isoformat(),
-                    "hits": 0,
-                    "last_used": 0,
-                })
-                save_api_keys(keys)
-                ALL_KEYS.clear()
-                ALL_KEYS.extend(keys)
-                self._send_json({"status": "ok", "count": len(keys)})
-                return
-
-        # ── Upload list legacy ──
-        else:
-            self._send_json({"error": "Not found"}, 404)
+        self._send_json({"error": "Not found"}, 404)
 
 # ─── Lancement ───
 if __name__ == "__main__":
     print(f"╔═══════════════════════════════════════╗")
-    print(f"║  Vzlom Bridge v2.1                    ║")
-    print(f"║                                       ║")
-    print(f"║  🔑 Auth     : POST /auth/register    ║")
-    print(f"║  🔑         : POST /auth/login        ║")
-    print(f"║  🌐 Mémoire  : /memory?token=X        ║")
-    print(f"║  ⚡ Bash      : POST /bash?token=X    ║")
-    print(f"║  📋 Tâches   : /tasks?token=X          ║")
-    print(f"║  📂 Workspace: {WORKSPACE}/{{user}}        ║")
-    print(f"║  🔑 Clés API : /admin/keys             ║")
-    print(f"║  🚫 ISOLÉ des projets MDT              ║")
+    print(f"║  Vzlom Bridge v2.2 — Tout-en-un       ║")
+    print(f"║  API + Mobile  sur le même port       ║")
+    print(f"║  Port : {PORT:<31}║")
+    print(f"║  🌐 http://0.0.0.0:{PORT}/             ║")
     print(f"╚═══════════════════════════════════════╝")
-
-    server = http.server.HTTPServer(("0.0.0.0", PORT), BridgeHandler)
-    server.serve_forever()
+    http.server.HTTPServer(("0.0.0.0", PORT), BridgeHandler).serve_forever()
